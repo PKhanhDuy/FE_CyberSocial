@@ -5,6 +5,7 @@ import { X, Image, Video, Link as LinkIcon, Hash, Smile, Send, ShieldCheck, Tras
 import EmojiPicker, { Theme } from "emoji-picker-react"
 import { useThemeStore } from "@/store/useThemeStore"
 import { Button } from "@/components/ui/Button"
+import { postApi } from "@/lib/api"
 
 interface CreatePostModalProps {
   isOpen: boolean
@@ -15,6 +16,7 @@ interface CreatePostModalProps {
 export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
   const [content, setContent] = useState("")
   const [isScanning, setIsScanning] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [media, setMedia] = useState<{ file: File; type: 'image' | 'video'; url: string } | null>(null)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
@@ -62,18 +64,52 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
     setMedia(null)
   }
 
-  const handlePost = () => {
-    if (!content.trim() && !media) return
+  const handlePost = async () => {
+    if (!content.trim()) {
+      setSubmitError("Backend hien chi ho tro noi dung dang chu.")
+      return
+    }
 
     setIsScanning(true)
-    // Simulate AI scanning before posting
-    setTimeout(() => {
-      setIsScanning(false)
-      setContent("")
-      setMedia(null)
-      onClose()
-      // In a real app, we would dispatch the new post to the store here
+    setSubmitError(null)
+
+    // Keep the existing AI scanning UX unchanged; submit after the scan finishes.
+    window.setTimeout(async () => {
+      try {
+        await postApi.create(content.trim())
+        window.dispatchEvent(new CustomEvent("cybersocial:post-created"))
+        setContent("")
+        setMedia(null)
+        onClose()
+      } catch (error) {
+        setSubmitError(error instanceof Error ? error.message : "Khong tao duoc bai viet")
+      } finally {
+        setIsScanning(false)
+      }
     }, 1500)
+  }
+
+  const closeAndReset = () => {
+    setSubmitError(null)
+    setContent("")
+    if (media?.url) {
+      URL.revokeObjectURL(media.url)
+    }
+    setMedia(null)
+    onClose()
+  }
+
+  const handleCancel = () => {
+    if (content.trim() || media) {
+      setShowCancelConfirm(true)
+    } else {
+      closeAndReset()
+    }
+  }
+
+  const confirmCancel = () => {
+    setShowCancelConfirm(false)
+    closeAndReset()
   }
 
   return createPortal(
@@ -157,6 +193,12 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                     </span>
                   </motion.div>
                 )}
+
+                {submitError && (
+                  <div className="mt-4 p-3 rounded-lg bg-danger/10 border border-danger/40 text-sm text-foreground">
+                    {submitError}
+                  </div>
+                )}
               </div>
 
               {/* Footer */}
@@ -219,13 +261,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                 <div className="flex gap-4">
                   <Button
                     className="flex items-center gap-2 px-6 font-bold text-red-500 hover:bg-red-500/10"
-                    onClick={() => {
-                      if (content.trim() || media) {
-                        setShowCancelConfirm(true)
-                      } else {
-                        onClose()
-                      }
-                    }}
+                    onClick={handleCancel}
                   >
                     Hủy
                   </Button>
@@ -284,10 +320,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                     <Button
                       className="flex-1 bg-red-500 hover:bg-red-600 text-white"
                       onClick={() => {
-                        setShowCancelConfirm(false)
-                        setContent("")
-                        setMedia(null)
-                        onClose()
+                        confirmCancel()
                       }}
                     >
                       OK

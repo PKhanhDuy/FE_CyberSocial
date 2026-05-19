@@ -21,7 +21,7 @@ export function Home() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Tìm kiếm tín hiệu, ID, từ khóa..."
+            placeholder="Tìm kiếm người dùng, ID, từ khóa..."
             className="input-modern block w-full pl-10 pr-3 py-2 rounded-xl text-sm placeholder-muted"
           />
         </div>

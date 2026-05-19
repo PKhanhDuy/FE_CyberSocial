@@ -1,8 +1,10 @@
 import { create } from 'zustand'
+import { getAccessToken, themeApi } from '@/lib/api'
 
 interface ThemeStore {
   isDarkMode: boolean
-  toggleTheme: () => void
+  hydrateTheme: () => Promise<void>
+  toggleTheme: () => Promise<void>
 }
 
 const getInitialTheme = () => {
@@ -21,17 +23,32 @@ const getInitialTheme = () => {
 
 export const useThemeStore = create<ThemeStore>((set) => ({
   isDarkMode: getInitialTheme(),
-  toggleTheme: () => set((state) => {
-    const newTheme = !state.isDarkMode
-    localStorage.setItem('color-theme', newTheme ? 'dark' : 'light')
-    
-    // Apply to html element immediately
-    if (newTheme) {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
+  hydrateTheme: async () => {
+    if (!getAccessToken()) return
+
+    try {
+      const { theme } = await themeApi.get()
+      if (theme === 'SYSTEM') return
+      const isDarkMode = theme === 'DARK'
+      localStorage.setItem('color-theme', isDarkMode ? 'dark' : 'light')
+      document.documentElement.classList.toggle('dark', isDarkMode)
+      set({ isDarkMode })
+    } catch {
+      // Local theme remains the fallback when the backend is unavailable.
     }
-    
-    return { isDarkMode: newTheme }
-  }),
+  },
+  toggleTheme: async () => {
+    const nextTheme = !useThemeStore.getState().isDarkMode
+    localStorage.setItem('color-theme', nextTheme ? 'dark' : 'light')
+    document.documentElement.classList.toggle('dark', nextTheme)
+    set({ isDarkMode: nextTheme })
+
+    if (!getAccessToken()) return
+
+    try {
+      await themeApi.update(nextTheme ? 'DARK' : 'LIGHT')
+    } catch {
+      // Keep the optimistic local change; the next session can resync.
+    }
+  },
 }))

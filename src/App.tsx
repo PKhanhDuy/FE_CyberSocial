@@ -7,9 +7,17 @@ import { Profile } from "./pages/Profile"
 import { Notifications } from "./pages/Notifications"
 import { VerifiedNews } from "./pages/VerifiedNews"
 import { useThemeStore } from "./store/useThemeStore"
+import { useAuthStore } from "./store/useAuthStore"
+import { AuthGuard, GuestGuard } from "./components/auth/AuthGuard"
+import { Login } from "./pages/Login"
+import { Register } from "./pages/Register"
+import { ForgotPassword } from "./pages/ForgotPassword"
 
 function App() {
   const isDarkMode = useThemeStore((state) => state.isDarkMode)
+  const hydrateTheme = useThemeStore((state) => state.hydrateTheme)
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+  const refreshCurrentUser = useAuthStore((state) => state.refreshCurrentUser)
 
   useEffect(() => {
     if (isDarkMode) {
@@ -19,16 +27,34 @@ function App() {
     }
   }, [isDarkMode])
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      refreshCurrentUser()
+      hydrateTheme()
+    }
+  }, [hydrateTheme, isAuthenticated, refreshCurrentUser])
+
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<MainLayout />}>
-          <Route index element={<Home />} />
-          <Route path="explore" element={<Explore />} />
-          <Route path="verified" element={<VerifiedNews />} />
-          <Route path="notifications" element={<Notifications />} />
-          <Route path="profile" element={<Profile />} />
+        {/* Guest only routes */}
+        <Route element={<GuestGuard />}>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
         </Route>
+
+        {/* Protected routes */}
+        <Route element={<AuthGuard />}>
+          <Route path="/" element={<MainLayout />}>
+            <Route index element={<Home />} />
+            <Route path="explore" element={<Explore />} />
+            <Route path="verified" element={<VerifiedNews />} />
+            <Route path="notifications" element={<Notifications />} />
+            <Route path="profile" element={<Profile />} />
+          </Route>
+        </Route>
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>

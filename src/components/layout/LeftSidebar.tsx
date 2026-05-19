@@ -1,10 +1,11 @@
 import { useState } from "react"
 import { NavLink } from "react-router-dom"
-import { Home, Compass, CheckCircle, User, Bell, Sun, Moon } from "lucide-react"
+import { Home, Compass, CheckCircle, User, Bell, Sun, Moon, LogOut } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CreatePostModal } from "@/components/feed/CreatePostModal"
 import { useNotificationStore } from "@/store/useNotificationStore"
 import { useThemeStore } from "@/store/useThemeStore"
+import { useAuthStore } from "@/store/useAuthStore"
 
 const navItems = [
   { icon: Home, label: "Trang chủ", path: "/" },
@@ -18,6 +19,7 @@ export function LeftSidebar() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const unreadCount = useNotificationStore((state) => state.unreadCount())
   const { isDarkMode, toggleTheme } = useThemeStore()
+  const logout = useAuthStore((state) => state.logout)
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 glass-panel border-r-0 border-y-0 z-10 flex flex-col p-6">
@@ -62,18 +64,26 @@ export function LeftSidebar() {
         ))}
       </nav>
 
-      <div className="mt-auto flex flex-col gap-4">
+      <div className="mt-auto flex flex-col gap-3">
         <button
           onClick={toggleTheme}
-          className="flex items-center justify-center gap-3 w-full py-3 rounded-lg text-muted hover:text-foreground hover:bg-panel-hover transition-all duration-300 font-medium"
+          className="flex items-center justify-center gap-3 w-full py-2.5 rounded-lg text-muted hover:text-foreground hover:bg-panel-hover transition-all duration-300 font-medium cursor-pointer"
         >
           {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           <span>{isDarkMode ? "Light Mode" : "Dark Mode"}</span>
         </button>
 
         <button
+          onClick={logout}
+          className="flex items-center justify-center gap-3 w-full py-2.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-all duration-300 font-medium cursor-pointer"
+        >
+          <LogOut className="w-5 h-5" />
+          <span>Đăng xuất</span>
+        </button>
+
+        <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="w-full py-3 rounded-lg bg-accent-pink/20 text-accent-pink border border-accent-pink/50 hover:bg-accent-pink/30 transition-all duration-300 font-bold tracking-wider neon-border-pink"
+          className="w-full py-3 rounded-lg bg-accent-pink/20 text-accent-pink border border-accent-pink/50 hover:bg-accent-pink/30 transition-all duration-300 font-bold tracking-wider neon-border-pink cursor-pointer"
         >
           BÀI VIẾT MỚI
         </button>

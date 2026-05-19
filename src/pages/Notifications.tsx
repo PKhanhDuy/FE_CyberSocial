@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ShieldAlert, Activity, User, MessageSquare, Heart, CheckCircle2, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useNotificationStore, type NotificationType } from "@/store/useNotificationStore"
@@ -8,8 +8,15 @@ type FilterTab = "ALL" | "SOCIAL" | "SYSTEM"
 export function Notifications() {
   const [activeTab, setActiveTab] = useState<FilterTab>("ALL")
   const notifications = useNotificationStore((state) => state.notifications)
+  const loadNotifications = useNotificationStore((state) => state.loadNotifications)
+  const isLoading = useNotificationStore((state) => state.isLoading)
+  const error = useNotificationStore((state) => state.error)
   const markAllAsRead = useNotificationStore((state) => state.markAllAsRead)
   const unreadCount = useNotificationStore((state) => state.unreadCount())
+
+  useEffect(() => {
+    loadNotifications()
+  }, [loadNotifications])
 
   const filteredNotifications = notifications.filter(n => {
     if (activeTab === "ALL") return true
@@ -93,6 +100,18 @@ export function Notifications() {
 
       {/* Notification List */}
       <div className="space-y-4">
+        {isLoading && (
+          <div className="text-center py-6 text-muted font-mono">
+            Dang dong bo thong bao...
+          </div>
+        )}
+
+        {error && (
+          <div className="p-4 rounded-xl border border-danger/40 bg-danger/10 text-sm text-foreground">
+            {error}
+          </div>
+        )}
+
         {filteredNotifications.map((notification) => (
           <div
             key={notification.id}

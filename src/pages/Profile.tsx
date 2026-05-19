@@ -1,11 +1,12 @@
-import { useState } from "react"
-import { ShieldCheck, Network, Activity, Settings, MapPin, Link as LinkIcon, Edit2, UserCircle, Heart, Briefcase, GraduationCap, Globe, Languages, Cake } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { ShieldCheck, Network, Activity, Settings, MapPin, Link as LinkIcon, Edit2, UserCircle, Heart, Briefcase, GraduationCap, Globe, Languages, Cake, Camera } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { MOCK_POSTS } from "@/mocks/data"
 import { PostCard } from "@/components/feed/PostCard"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
 import type { Post } from "@/mocks/types"
 import { Progress } from "@/components/ui/Progress"
+import { postApi } from "@/lib/api"
+import { useAuthStore } from "@/store/useAuthStore"
 
 const TABS = [
   { id: "activity", label: "Hoạt động", icon: Activity },
@@ -25,16 +26,70 @@ export function Profile() {
   const [activeTab, setActiveTab] = useState("activity")
   const [aboutTab, setAboutTab] = useState("overview")
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
+  const currentUser = useAuthStore((state) => state.user)
+  const updateDisplayName = useAuthStore((state) => state.updateDisplayName)
+  const [userPosts, setUserPosts] = useState<Post[]>([])
+  const [postsError, setPostsError] = useState<string | null>(null)
 
-  // Using Nexus Prime as the mock user profile
-  const initialUser = MOCK_POSTS.find(p => p.author.id === "u_1")?.author
-  const [userProfile, setUserProfile] = useState<any>(initialUser || {})
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const coverInputRef = useRef<HTMLInputElement>(null)
+
+  const [userProfile, setUserProfile] = useState<any>({
+    cover: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=1600",
+    ...(currentUser || {})
+  })
+
+  useEffect(() => {
+    if (currentUser) {
+      setUserProfile((prev: any) => ({ ...prev, ...currentUser }))
+    }
+  }, [currentUser])
+
+  useEffect(() => {
+    const loadUserPosts = async () => {
+      setPostsError(null)
+      try {
+        const response = await postApi.list()
+        setUserPosts(response.content.filter((post) => post.author.id === currentUser?.id))
+      } catch (error) {
+        setPostsError(error instanceof Error ? error.message : "Khong tai duoc bai viet")
+      }
+    }
+
+    loadUserPosts()
+    window.addEventListener("cybersocial:post-created", loadUserPosts)
+    return () => window.removeEventListener("cybersocial:post-created", loadUserPosts)
+  }, [currentUser?.id])
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          setUserProfile((prev: any) => ({ ...prev, avatar: reader.result }))
+        }
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          setUserProfile((prev: any) => ({ ...prev, cover: reader.result }))
+        }
+      }
+      reader.readAsDataURL(file)
+    }
+  }
 
   // Inline editing state
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState<string>("")
-
-  const userPosts = MOCK_POSTS.filter(p => p.author.id === "u_1")
 
   const startEdit = (field: string, currentValue: any) => {
     setEditingField(field)
@@ -45,10 +100,14 @@ export function Profile() {
     }
   }
 
-  const saveEdit = (field: string) => {
+  const saveEdit = async (field: string) => {
     let finalValue: any = editValue;
     if (field === 'hobbies' && typeof editValue === 'string') {
       finalValue = editValue.split(',').map(s => s.trim()).filter(s => s !== "");
+    }
+    if (field === "username") {
+      const saved = await updateDisplayName(String(finalValue))
+      if (!saved) return
     }
     setUserProfile((prev: any) => ({ ...prev, [field]: finalValue }))
     setEditingField(null)
@@ -130,30 +189,65 @@ export function Profile() {
       {/* Header/Cover Section */}
       <div className="relative rounded-2xl overflow-hidden glass-panel border border-border">
         {/* Cover Image with cyber gradient overlay */}
-        <div className="h-48 relative overflow-hidden">
+        <div
+          className="h-48 relative overflow-hidden cursor-pointer group"
+          onClick={() => coverInputRef.current?.click()}
+          title="Thay đổi ảnh bìa"
+        >
           <div className="absolute inset-0 bg-gradient-to-br from-accent-blue/20 to-accent-pink/20 mix-blend-overlay z-10" />
-          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=1600')] bg-cover bg-center" />
+          <div
+            className="absolute inset-0 bg-cover bg-center transition-all duration-300 group-hover:scale-[1.02]"
+            style={{ backgroundImage: `url(${userProfile.cover})` }}
+          />
           {/* Cyber grid effect */}
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(96,165,250,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(96,165,250,0.1)_1px,transparent_1px)] bg-[size:20px_20px] z-10 opacity-30" />
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(96,165,250,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(96,165,250,0.1)_1px,transparent_1px)] bg-[size:20px_20px] z-10 opacity-30 pointer-events-none" />
+
+          {/* Edit Cover Overlay */}
+          <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center justify-center gap-2 text-white font-bold tracking-wider">
+            <Camera className="w-5 h-5 text-accent-blue animate-pulse" />
+            <span className="text-xs font-mono">THAY ĐỔI ẢNH BÌA</span>
+          </div>
+
+          <input
+            type="file"
+            ref={coverInputRef}
+            onChange={handleCoverChange}
+            accept="image/*"
+            className="hidden"
+          />
         </div>
 
         {/* Profile Info */}
         <div className="px-6 pb-6 relative z-20">
           <div className="flex justify-between items-end -mt-16 mb-4">
-            <div className="relative group">
+            <div
+              className="relative group cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+              title="Thay đổi ảnh đại diện"
+            >
               <div className="w-32 h-32 rounded-xl border-2 border-accent-blue p-1 bg-background neon-border-blue relative overflow-hidden">
                 <img
                   src={userProfile.avatar}
                   alt={userProfile.username}
                   className="w-full h-full object-cover rounded-lg"
                 />
-                <div className="absolute inset-0 bg-accent-blue/10 group-hover:bg-transparent transition-colors" />
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 text-white">
+                  <Camera className="w-6 h-6 text-accent-blue" />
+                  <span className="text-[10px] font-bold tracking-widest font-mono">THAY ĐỔI</span>
+                </div>
               </div>
-              <div className="absolute -bottom-2 -right-2 bg-background rounded-full p-1 border border-border">
+              <div className="absolute -bottom-2 -right-2 bg-background rounded-full p-1 border border-border z-10">
                 <div className="bg-accent-blue p-1.5 rounded-full shadow-[var(--shadow-neon-blue)]">
                   <ShieldCheck className="w-4 h-4 text-black" />
                 </div>
               </div>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleAvatarChange}
+                accept="image/*"
+                className="hidden"
+              />
             </div>
 
             <button
@@ -266,6 +360,16 @@ export function Profile() {
             {userPosts.map((post) => (
               <PostCard key={post.id} post={post} onViewAnalysis={setSelectedPost} />
             ))}
+            {postsError && (
+              <div className="p-4 rounded-xl border border-danger/40 bg-danger/10 text-sm text-foreground">
+                {postsError}
+              </div>
+            )}
+            {!postsError && userPosts.length === 0 && (
+              <div className="text-center py-8 text-muted font-mono">
+                Chua co bai viet nao.
+              </div>
+            )}
           </div>
         )}
 

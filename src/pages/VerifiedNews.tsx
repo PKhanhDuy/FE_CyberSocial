@@ -1,15 +1,39 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ShieldCheck, Server, Database, Lock } from "lucide-react"
 import { MOCK_POSTS } from "@/mocks/data"
 import { PostCard } from "@/components/feed/PostCard"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
 import type { Post } from "@/mocks/types"
+import { postApi } from "@/lib/api"
 
 export function VerifiedNews() {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
+  const [posts, setPosts] = useState<Post[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   // Filter for only verified posts
-  const verifiedPosts = MOCK_POSTS.filter(post => post.aiState === "verified")
+  const verifiedPosts = posts.filter(post => post.aiState === "verified")
+
+  useEffect(() => {
+    const loadPosts = async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const response = await postApi.list()
+        setPosts(response.content)
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Khong tai duoc tin xac thuc")
+        setPosts(MOCK_POSTS)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadPosts()
+    window.addEventListener("cybersocial:post-created", loadPosts)
+    return () => window.removeEventListener("cybersocial:post-created", loadPosts)
+  }, [])
 
   return (
     <div className="space-y-6 pb-20">
@@ -64,6 +88,18 @@ export function VerifiedNews() {
 
       {/* Feed List */}
       <div className="space-y-4">
+        {isLoading && (
+          <div className="text-center py-8 text-muted font-mono">
+            Dang tai tin xac thuc...
+          </div>
+        )}
+
+        {error && (
+          <div className="p-4 rounded-xl border border-danger/40 bg-danger/10 text-sm text-foreground">
+            {error}
+          </div>
+        )}
+
         {verifiedPosts.length > 0 ? (
           verifiedPosts.map((post) => (
             <PostCard key={post.id} post={post} onViewAnalysis={setSelectedPost} />

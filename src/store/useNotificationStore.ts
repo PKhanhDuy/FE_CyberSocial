@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { notificationApi } from "@/lib/api"
 
 export type NotificationType = "system_alert" | "ai_update" | "social_like" | "social_comment" | "social_follow" | "network_alert"
 
@@ -71,14 +72,36 @@ export const MOCK_NOTIFICATIONS: AppNotification[] = [
 
 interface NotificationStore {
   notifications: AppNotification[]
-  markAllAsRead: () => void
+  isLoading: boolean
+  error: string | null
+  loadNotifications: () => Promise<void>
+  markAllAsRead: () => Promise<void>
   unreadCount: () => number
 }
 
 export const useNotificationStore = create<NotificationStore>((set, get) => ({
   notifications: MOCK_NOTIFICATIONS,
-  markAllAsRead: () => set((state) => ({
-    notifications: state.notifications.map(n => ({ ...n, isRead: true }))
-  })),
+  isLoading: false,
+  error: null,
+  loadNotifications: async () => {
+    set({ isLoading: true, error: null })
+    try {
+      const notifications = await notificationApi.list()
+      set({ notifications, isLoading: false })
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : "Khong tai duoc thong bao",
+        isLoading: false,
+      })
+    }
+  },
+  markAllAsRead: async () => {
+    const unread = get().notifications.filter((notification) => !notification.isRead)
+    set((state) => ({
+      notifications: state.notifications.map(n => ({ ...n, isRead: true }))
+    }))
+
+    await Promise.allSettled(unread.map((notification) => notificationApi.markRead(notification.id)))
+  },
   unreadCount: () => get().notifications.filter(n => !n.isRead).length
 }))

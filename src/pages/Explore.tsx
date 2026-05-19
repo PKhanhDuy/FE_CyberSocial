@@ -1,10 +1,11 @@
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
 import { Search, Radar, TrendingUp, Filter, Globe, Hash } from "lucide-react"
 import { MOCK_POSTS } from "@/mocks/data"
 import { PostCard } from "@/components/feed/PostCard"
 import type { Post } from "@/mocks/types"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
+import { postApi } from "@/lib/api"
 
 const TRENDING_TAGS = [
   "#Lõi_Lượng_Tử", "#AI_Vi_Phạm", "#CyberSec", "#NeuralNet", "#Deepfake_Alert", "#NeonCity"
@@ -14,6 +15,38 @@ export function Explore() {
   const [searchQuery, setSearchQuery] = useState("")
   const [activeFilter, setActiveFilter] = useState("all")
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
+  const [posts, setPosts] = useState<Post[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const loadPosts = async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const response = await postApi.list()
+        setPosts(response.content)
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Khong tai duoc du lieu")
+        setPosts(MOCK_POSTS)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadPosts()
+    window.addEventListener("cybersocial:post-created", loadPosts)
+    return () => window.removeEventListener("cybersocial:post-created", loadPosts)
+  }, [])
+
+  const filteredPosts = useMemo(() => {
+    return posts.filter((post) => {
+      const matchesFilter = activeFilter === 'all' || post.aiState === activeFilter
+      const normalizedSearch = searchQuery.trim().toLowerCase()
+      const matchesSearch = !normalizedSearch || post.content.toLowerCase().includes(normalizedSearch) || post.author.username.toLowerCase().includes(normalizedSearch)
+      return matchesFilter && matchesSearch
+    })
+  }, [activeFilter, posts, searchQuery])
 
   // Handle viewing analysis
   const handleViewAnalysis = (post: Post) => {
@@ -135,7 +168,7 @@ export function Explore() {
           onClick={() => setActiveFilter('all')}
           className={`pb-2 text-sm font-bold tracking-wider uppercase transition-colors relative ${activeFilter === 'all' ? 'text-accent-blue' : 'text-muted hover:text-muted'}`}
         >
-          Tất cả luồng
+          Tất cả
           {activeFilter === 'all' && (
             <motion.div layoutId="explore-filter" className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-blue shadow-[var(--shadow-neon-blue)]" />
           )}
@@ -153,14 +186,26 @@ export function Explore() {
 
       {/* Feed Content */}
       <div className="space-y-6">
-        {MOCK_POSTS.filter(post => activeFilter === 'all' || post.aiState === activeFilter).map((post) => (
+        {isLoading && (
+          <div className="text-center py-10 text-muted font-mono">
+            Dang dong bo du lieu...
+          </div>
+        )}
+
+        {error && (
+          <div className="p-4 rounded-xl border border-danger/40 bg-danger/10 text-sm text-foreground">
+            {error}
+          </div>
+        )}
+
+        {filteredPosts.map((post) => (
           <PostCard
             key={post.id}
             post={post}
             onViewAnalysis={handleViewAnalysis}
           />
         ))}
-        {MOCK_POSTS.filter(post => activeFilter === 'all' || post.aiState === activeFilter).length === 0 && (
+        {!isLoading && filteredPosts.length === 0 && (
           <div className="text-center py-10 text-muted font-mono">
             Không tìm thấy dữ liệu khớp với bộ lọc...
           </div>
