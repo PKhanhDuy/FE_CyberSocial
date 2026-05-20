@@ -5,7 +5,7 @@ import { X, Image, Video, Link as LinkIcon, Hash, Smile, Send, ShieldCheck, Tras
 import EmojiPicker, { Theme } from "emoji-picker-react"
 import { useThemeStore } from "@/store/useThemeStore"
 import { Button } from "@/components/ui/Button"
-import { postApi } from "@/lib/api"
+import { postApi, uploadApi } from "@/lib/api"
 
 interface CreatePostModalProps {
   isOpen: boolean
@@ -65,8 +65,13 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
   }
 
   const handlePost = async () => {
-    if (!content.trim()) {
-      setSubmitError("Backend hien chi ho tro noi dung dang chu.")
+    if (!content.trim() && !media) {
+      setSubmitError("Vui long nhap noi dung hoac chon anh.")
+      return
+    }
+
+    if (media?.type === "video") {
+      setSubmitError("Backend hien chi ho tro upload anh.")
       return
     }
 
@@ -76,10 +81,11 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
     // Keep the existing AI scanning UX unchanged; submit after the scan finishes.
     window.setTimeout(async () => {
       try {
-        await postApi.create(content.trim())
+        const mediaUrls = media ? [(await uploadApi.image(media.file)).url] : []
+        await postApi.create(content.trim(), "PUBLIC", mediaUrls)
         window.dispatchEvent(new CustomEvent("cybersocial:post-created"))
         setContent("")
-        setMedia(null)
+        handleRemoveMedia()
         onClose()
       } catch (error) {
         setSubmitError(error instanceof Error ? error.message : "Khong tao duoc bai viet")

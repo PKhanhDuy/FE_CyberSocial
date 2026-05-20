@@ -15,6 +15,8 @@ interface AuthState {
   logout: () => Promise<void>
   refreshCurrentUser: () => Promise<void>
   updateDisplayName: (displayName: string) => Promise<boolean>
+  updateAvatar: (avatarUrl: string) => Promise<boolean>
+  updateCover: (coverUrl: string) => Promise<boolean>
   clearError: () => void
 }
 
@@ -101,6 +103,30 @@ export const useAuthStore = create<AuthState>((set) => {
         return true
       } catch (error) {
         set({ error: error instanceof Error ? error.message : "Cap nhat ho so that bai", isLoading: false })
+        return false
+      }
+    },
+
+    updateAvatar: async (avatarUrl) => {
+      set({ isLoading: true, error: null })
+      try {
+        const user = await userApi.updateAvatar(avatarUrl)
+        set({ user, isLoading: false })
+        return true
+      } catch (error) {
+        set({ error: error instanceof Error ? error.message : "Cap nhat anh dai dien that bai", isLoading: false })
+        return false
+      }
+    },
+
+    updateCover: async (coverUrl) => {
+      set({ isLoading: true, error: null })
+      try {
+        const user = await userApi.updateCover(coverUrl)
+        set({ user, isLoading: false })
+        return true
+      } catch (error) {
+        set({ error: error instanceof Error ? error.message : "Cap nhat anh bia that bai", isLoading: false })
         return false
       }
     },

@@ -5,6 +5,7 @@ export interface User {
   username: string
   handle: string
   avatar: string
+  cover?: string
   isVerified: boolean
   trustScore: number
   bio?: string

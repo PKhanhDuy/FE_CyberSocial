@@ -26,6 +26,8 @@ export interface BackendUser {
   id: string
   email: string
   displayName: string
+  avatarUrl?: string
+  coverUrl?: string
   role: "USER" | "ADMIN"
   themePreference: "LIGHT" | "DARK" | "SYSTEM"
   createdAt: string
@@ -43,10 +45,20 @@ export interface BackendPost {
   id: string
   authorId: string
   authorDisplayName: string
+  authorAvatarUrl?: string
   content: string
   visibility: "PUBLIC" | "PRIVATE"
+  mediaUrls: string[]
   createdAt: string
   updatedAt: string
+}
+
+export interface UploadedImage {
+  publicId: string
+  originalFileName: string
+  contentType: string
+  size: number
+  url: string
 }
 
 interface BackendNotification {
@@ -63,6 +75,7 @@ export interface AppPost {
   id: string
   author: User
   content: string
+  media?: string
   timestamp: string
   likes: number
   comments: number
@@ -155,7 +168,8 @@ export const mapUser = (user: BackendUser): User => ({
   id: user.id,
   username: user.displayName,
   handle: makeHandle(user.displayName || user.email.split("@")[0]),
-  avatar: `https://i.pravatar.cc/150?u=${encodeURIComponent(user.email)}`,
+  avatar: user.avatarUrl || `https://i.pravatar.cc/150?u=${encodeURIComponent(user.email)}`,
+  cover: user.coverUrl,
   isVerified: user.role === "ADMIN",
   trustScore: user.role === "ADMIN" ? 98 : 80,
   bio: "Thanh vien CyberSocial.",
@@ -179,11 +193,12 @@ export const mapPost = (post: BackendPost): AppPost => ({
     id: post.authorId,
     username: post.authorDisplayName,
     handle: makeHandle(post.authorDisplayName),
-    avatar: `https://i.pravatar.cc/150?u=${encodeURIComponent(post.authorId)}`,
+    avatar: post.authorAvatarUrl || `https://i.pravatar.cc/150?u=${encodeURIComponent(post.authorId)}`,
     isVerified: false,
     trustScore: 80,
   },
   content: post.content,
+  media: post.mediaUrls?.[0],
   timestamp: relativeTime(post.createdAt),
   likes: 0,
   comments: 0,
@@ -244,6 +259,24 @@ export const userApi = {
     storeAuthUser(user)
     return user
   },
+
+  async updateAvatar(avatarUrl: string) {
+    const user = mapUser(await apiRequest<BackendUser>("/api/users/me/avatar", {
+      method: "PUT",
+      body: JSON.stringify({ avatarUrl }),
+    }))
+    storeAuthUser(user)
+    return user
+  },
+
+  async updateCover(coverUrl: string) {
+    const user = mapUser(await apiRequest<BackendUser>("/api/users/me/cover", {
+      method: "PUT",
+      body: JSON.stringify({ coverUrl }),
+    }))
+    storeAuthUser(user)
+    return user
+  },
 }
 
 export const postApi = {
@@ -255,11 +288,23 @@ export const postApi = {
     }
   },
 
-  async create(content: string, visibility: "PUBLIC" | "PRIVATE" = "PUBLIC") {
+  async create(content: string, visibility: "PUBLIC" | "PRIVATE" = "PUBLIC", mediaUrls: string[] = []) {
     return mapPost(await apiRequest<BackendPost>("/api/posts", {
       method: "POST",
-      body: JSON.stringify({ content, visibility }),
+      body: JSON.stringify({ content, visibility, mediaUrls }),
     }))
+  },
+}
+
+export const uploadApi = {
+  async image(file: File) {
+    const formData = new FormData()
+    formData.append("file", file)
+
+    return apiRequest<UploadedImage>("/api/uploads/images", {
+      method: "POST",
+      body: formData,
+    })
   },
 }
 

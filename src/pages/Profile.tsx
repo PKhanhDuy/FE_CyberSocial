@@ -5,7 +5,7 @@ import { PostCard } from "@/components/feed/PostCard"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
 import type { Post } from "@/mocks/types"
 import { Progress } from "@/components/ui/Progress"
-import { postApi } from "@/lib/api"
+import { postApi, uploadApi } from "@/lib/api"
 import { useAuthStore } from "@/store/useAuthStore"
 
 const TABS = [
@@ -28,8 +28,12 @@ export function Profile() {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
   const currentUser = useAuthStore((state) => state.user)
   const updateDisplayName = useAuthStore((state) => state.updateDisplayName)
+  const updateAvatar = useAuthStore((state) => state.updateAvatar)
+  const updateCover = useAuthStore((state) => state.updateCover)
+  const refreshCurrentUser = useAuthStore((state) => state.refreshCurrentUser)
   const [userPosts, setUserPosts] = useState<Post[]>([])
   const [postsError, setPostsError] = useState<string | null>(null)
+  const [profileError, setProfileError] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
@@ -44,6 +48,12 @@ export function Profile() {
       setUserProfile((prev: any) => ({ ...prev, ...currentUser }))
     }
   }, [currentUser])
+
+  useEffect(() => {
+    refreshCurrentUser().catch(() => {
+      setProfileError("Khong tai duoc ho so tai khoan")
+    })
+  }, [refreshCurrentUser])
 
   useEffect(() => {
     const loadUserPosts = async () => {
@@ -61,29 +71,43 @@ export function Profile() {
     return () => window.removeEventListener("cybersocial:post-created", loadUserPosts)
   }, [currentUser?.id])
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          setUserProfile((prev: any) => ({ ...prev, avatar: reader.result }))
-        }
+    if (!file) return
+
+    try {
+      setProfileError(null)
+      const uploaded = await uploadApi.image(file)
+      const saved = await updateAvatar(uploaded.url)
+      if (!saved) {
+        setProfileError("Khong cap nhat duoc anh dai dien")
       }
-      reader.readAsDataURL(file)
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : "Khong upload duoc anh dai dien")
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
     }
   }
 
-  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoverChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          setUserProfile((prev: any) => ({ ...prev, cover: reader.result }))
-        }
+    if (!file) return
+
+    try {
+      setProfileError(null)
+      const uploaded = await uploadApi.image(file)
+      const saved = await updateCover(uploaded.url)
+      if (!saved) {
+        setProfileError("Khong cap nhat duoc anh bia")
       }
-      reader.readAsDataURL(file)
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : "Khong upload duoc anh bia")
+    } finally {
+      if (coverInputRef.current) {
+        coverInputRef.current.value = ""
+      }
     }
   }
 
@@ -333,6 +357,12 @@ export function Profile() {
           </div>
         </div>
       </div>
+
+      {profileError && (
+        <div className="p-4 rounded-xl border border-danger/40 bg-danger/10 text-sm text-foreground">
+          {profileError}
+        </div>
+      )}
 
       {/* Navigation Tabs */}
       <div id="profile-tabs" className="flex gap-2 border-b border-border sticky top-0 bg-background/ backdrop-blur-md z-10 pt-2 overflow-x-auto hide-scrollbar">

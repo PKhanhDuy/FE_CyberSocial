@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button"
 import { Heart, MessageSquare, Repeat2, Share, ShieldAlert, ShieldCheck, Activity } from "lucide-react"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { useAuthStore } from "@/store/useAuthStore"
 
 interface PostCardProps {
   post: Post
@@ -13,9 +14,11 @@ interface PostCardProps {
 }
 
 export function PostCard({ post, onViewAnalysis }: PostCardProps) {
+  const currentUser = useAuthStore((state) => state.user)
   const isSuspicious = post.aiState === "suspicious"
   const isVerified = post.aiState === "verified"
   const isMonitoring = post.aiState === "monitoring"
+  const authorAvatar = currentUser?.id === post.author.id ? currentUser.avatar : post.author.avatar
 
   return (
     <motion.div
@@ -56,7 +59,7 @@ export function PostCard({ post, onViewAnalysis }: PostCardProps) {
         <div className="flex justify-between items-start mb-4">
           <div className="flex items-center gap-3">
             <div className="relative">
-              <Avatar src={post.author.avatar} fallback={post.author.username[0]} />
+              <Avatar src={authorAvatar} fallback={post.author.username[0]} />
               {post.author.isOnline && (
                 <span className="absolute bottom-0 right-0 block h-3 w-3">
                   <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping" />
@@ -84,7 +87,9 @@ export function PostCard({ post, onViewAnalysis }: PostCardProps) {
           </div>
         </div>
 
-        <p className="text-foreground mb-4 whitespace-pre-wrap">{post.content}</p>
+        {post.content && (
+          <p className="text-foreground mb-4 whitespace-pre-wrap">{post.content}</p>
+        )}
 
         {post.media && (
           <div className="rounded-lg overflow-hidden border border-border mb-4 relative">
