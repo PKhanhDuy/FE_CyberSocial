@@ -61,6 +61,28 @@ export interface UploadedImage {
   url: string
 }
 
+export type FriendshipStatus = "PENDING" | "ACCEPTED"
+
+export interface FriendUser {
+  id: string
+  email: string
+  displayName: string
+  avatarUrl?: string
+  coverUrl?: string
+  relationshipStatus?: FriendshipStatus
+  friendshipId?: string
+}
+
+export interface Friendship {
+  id: string
+  status: FriendshipStatus
+  requesterId: string
+  addresseeId: string
+  user: FriendUser
+  createdAt: string
+  updatedAt: string
+}
+
 interface BackendNotification {
   id: string
   type: "SYSTEM" | "POST" | "SECURITY"
@@ -304,6 +326,53 @@ export const uploadApi = {
     return apiRequest<UploadedImage>("/api/uploads/images", {
       method: "POST",
       body: formData,
+    })
+  },
+}
+
+export const friendApi = {
+  async list() {
+    return apiRequest<Friendship[]>("/api/friends")
+  },
+
+  async incomingRequests() {
+    return apiRequest<Friendship[]>("/api/friends/requests/incoming")
+  },
+
+  async outgoingRequests() {
+    return apiRequest<Friendship[]>("/api/friends/requests/outgoing")
+  },
+
+  async search(query: string, page = 0, size = 20) {
+    const params = new URLSearchParams({
+      query,
+      page: String(page),
+      size: String(size),
+    })
+    return apiRequest<PagedResponse<FriendUser>>(`/api/friends/search?${params.toString()}`)
+  },
+
+  async sendRequest(userId: string) {
+    return apiRequest<Friendship>(`/api/friends/requests/${userId}`, {
+      method: "POST",
+    })
+  },
+
+  async acceptRequest(requestId: string) {
+    return apiRequest<Friendship>(`/api/friends/requests/${requestId}/accept`, {
+      method: "POST",
+    })
+  },
+
+  async deleteRequest(requestId: string) {
+    return apiRequest<void>(`/api/friends/requests/${requestId}`, {
+      method: "DELETE",
+    })
+  },
+
+  async removeFriend(friendshipId: string) {
+    return apiRequest<void>(`/api/friends/${friendshipId}`, {
+      method: "DELETE",
     })
   },
 }

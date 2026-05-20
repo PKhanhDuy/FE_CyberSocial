@@ -6,8 +6,10 @@ import { Explore } from "./pages/Explore"
 import { Profile } from "./pages/Profile"
 import { Notifications } from "./pages/Notifications"
 import { VerifiedNews } from "./pages/VerifiedNews"
+import { Friends } from "./pages/Friends"
 import { useThemeStore } from "./store/useThemeStore"
 import { useAuthStore } from "./store/useAuthStore"
+import { useFriendStore } from "./store/useFriendStore"
 import { AuthGuard, GuestGuard } from "./components/auth/AuthGuard"
 import { Login } from "./pages/Login"
 import { Register } from "./pages/Register"
@@ -18,6 +20,7 @@ function App() {
   const hydrateTheme = useThemeStore((state) => state.hydrateTheme)
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const refreshCurrentUser = useAuthStore((state) => state.refreshCurrentUser)
+  const loadIncomingFriendRequestCount = useFriendStore((state) => state.loadIncomingRequestCount)
 
   useEffect(() => {
     if (isDarkMode) {
@@ -30,9 +33,10 @@ function App() {
   useEffect(() => {
     if (isAuthenticated) {
       refreshCurrentUser()
+      loadIncomingFriendRequestCount()
       hydrateTheme()
     }
-  }, [hydrateTheme, isAuthenticated, refreshCurrentUser])
+  }, [hydrateTheme, isAuthenticated, loadIncomingFriendRequestCount, refreshCurrentUser])
 
   return (
     <Router>
@@ -50,6 +54,7 @@ function App() {
             <Route index element={<Home />} />
             <Route path="explore" element={<Explore />} />
             <Route path="verified" element={<VerifiedNews />} />
+            <Route path="friends" element={<Friends />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="profile" element={<Profile />} />
           </Route>
