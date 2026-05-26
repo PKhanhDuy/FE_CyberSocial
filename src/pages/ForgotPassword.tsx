@@ -23,8 +23,8 @@ export function ForgotPassword() {
     e.preventDefault()
     setValidationError("")
 
-    if (!email) {
-      setValidationError("Vui lòng điền Địa chỉ Email.")
+    if (!email.trim()) {
+      setValidationError("Vui long nhap email da dang ky.")
       return
     }
 
@@ -82,7 +82,7 @@ export function ForgotPassword() {
               )}
 
               <p className="text-muted text-sm leading-relaxed mb-6 text-center">
-                Nhập email đã đăng ký của bạn bên dưới. Chúng tôi sẽ gửi một giao thức đặt lại mật mã tới hộp thư của bạn.
+                Nhap email da dang ky tai khoan. He thong se gui mat khau tam thoi toi chinh email do.
               </p>
 
               {/* Form */}
@@ -90,7 +90,7 @@ export function ForgotPassword() {
                 {/* Email Field */}
                 <div className="space-y-1.5">
                   <label htmlFor="email" className="text-xs uppercase tracking-widest text-muted font-bold block">
-                    Email Liên Kết
+                    Email
                   </label>
                   <div className="relative">
                     <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-muted pointer-events-none">
@@ -99,7 +99,7 @@ export function ForgotPassword() {
                     <input
                       id="email"
                       type="email"
-                      placeholder="nhap-email@cybersocial.vn"
+                      placeholder="email-da-dang-ky@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       disabled={isLoading}
@@ -141,13 +141,13 @@ export function ForgotPassword() {
               </div>
               <h3 className="text-lg font-bold text-foreground">Gửi Yêu Cầu Thành Công</h3>
               <p className="text-muted text-sm leading-relaxed">
-                Chúng tôi đã gửi hướng dẫn đặt lại mật khẩu đến <strong className="text-foreground">{email}</strong>. Vui lòng kiểm tra hộp thư đến (hoặc thư rác/spam).
+                Neu email nay da dang ky, he thong da gui mat khau tam thoi den <strong className="text-foreground">{email.trim().toLowerCase()}</strong>. Vui long kiem tra hop thu den hoac spam.
               </p>
               <button
                 onClick={() => setIsSubmitted(false)}
                 className="text-xs text-accent-blue hover:underline cursor-pointer block mx-auto pt-2"
               >
-                Nhập một email khác
+                Nhap email khac
               </button>
             </motion.div>
           )}

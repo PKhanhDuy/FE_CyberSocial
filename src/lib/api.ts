@@ -264,6 +264,13 @@ export const authApi = {
       clearAuthStorage()
     }
   },
+
+  async forgotPassword(email: string) {
+    await apiRequest<void>("/api/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }, false)
+  },
 }
 
 export const userApi = {
@@ -304,6 +311,19 @@ export const userApi = {
 export const postApi = {
   async list(page = 0, size = 20) {
     const response = await apiRequest<PagedResponse<BackendPost>>(`/api/posts?page=${page}&size=${size}`)
+    return {
+      ...response,
+      content: response.content.map(mapPost),
+    }
+  },
+
+  async search(query: string, page = 0, size = 100) {
+    const params = new URLSearchParams({
+      query,
+      page: String(page),
+      size: String(size),
+    })
+    const response = await apiRequest<PagedResponse<BackendPost>>(`/api/posts?${params.toString()}`)
     return {
       ...response,
       content: response.content.map(mapPost),

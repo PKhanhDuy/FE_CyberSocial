@@ -26,7 +26,7 @@ export function Home() {
           />
         </div>
       </div>
-      <FeedList onViewAnalysis={setSelectedPost} />
+      <FeedList searchQuery={searchQuery} onViewAnalysis={setSelectedPost} />
       {selectedPost && (
         <AIAnalysisModal post={selectedPost} onClose={() => setSelectedPost(null)} />
       )}
