@@ -271,6 +271,13 @@ export const authApi = {
       body: JSON.stringify({ email }),
     }, false)
   },
+
+  async changePassword(currentPassword: string, newPassword: string) {
+    await apiRequest<void>("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    })
+  },
 }
 
 export const userApi = {

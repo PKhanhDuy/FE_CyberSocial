@@ -12,6 +12,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<boolean>
   register: (username: string, email: string, password: string) => Promise<boolean>
   forgotPassword: (email: string) => Promise<boolean>
+  changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>
   logout: () => Promise<void>
   refreshCurrentUser: () => Promise<void>
   updateDisplayName: (displayName: string) => Promise<boolean>
@@ -82,6 +83,18 @@ export const useAuthStore = create<AuthState>((set) => {
         return true
       } catch (error) {
         set({ error: error instanceof Error ? error.message : "Gui yeu cau that bai", isLoading: false })
+        return false
+      }
+    },
+
+    changePassword: async (currentPassword, newPassword) => {
+      set({ isLoading: true, error: null })
+      try {
+        await authApi.changePassword(currentPassword, newPassword)
+        set({ isLoading: false })
+        return true
+      } catch (error) {
+        set({ error: error instanceof Error ? error.message : "Doi mat khau that bai", isLoading: false })
         return false
       }
     },

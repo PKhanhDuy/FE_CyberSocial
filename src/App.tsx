@@ -10,10 +10,12 @@ import { Friends } from "./pages/Friends"
 import { useThemeStore } from "./store/useThemeStore"
 import { useAuthStore } from "./store/useAuthStore"
 import { useFriendStore } from "./store/useFriendStore"
+import { useNotificationStore } from "./store/useNotificationStore"
 import { AuthGuard, GuestGuard } from "./components/auth/AuthGuard"
 import { Login } from "./pages/Login"
 import { Register } from "./pages/Register"
 import { ForgotPassword } from "./pages/ForgotPassword"
+import { ChangePassword } from "./pages/ChangePassword"
 
 function App() {
   const isDarkMode = useThemeStore((state) => state.isDarkMode)
@@ -21,6 +23,7 @@ function App() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const refreshCurrentUser = useAuthStore((state) => state.refreshCurrentUser)
   const loadIncomingFriendRequestCount = useFriendStore((state) => state.loadIncomingRequestCount)
+  const loadNotifications = useNotificationStore((state) => state.loadNotifications)
 
   useEffect(() => {
     if (isDarkMode) {
@@ -34,9 +37,10 @@ function App() {
     if (isAuthenticated) {
       refreshCurrentUser()
       loadIncomingFriendRequestCount()
+      loadNotifications()
       hydrateTheme()
     }
-  }, [hydrateTheme, isAuthenticated, loadIncomingFriendRequestCount, refreshCurrentUser])
+  }, [hydrateTheme, isAuthenticated, loadIncomingFriendRequestCount, loadNotifications, refreshCurrentUser])
 
   return (
     <Router>
@@ -57,6 +61,7 @@ function App() {
             <Route path="friends" element={<Friends />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="profile" element={<Profile />} />
+            <Route path="change-password" element={<ChangePassword />} />
           </Route>
         </Route>
 

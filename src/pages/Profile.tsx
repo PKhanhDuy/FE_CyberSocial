@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
-import { ShieldCheck, Network, Activity, Settings, MapPin, Link as LinkIcon, Edit2, UserCircle, Heart, Briefcase, GraduationCap, Globe, Languages, Cake, Camera } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import { ShieldCheck, Network, Activity, Settings, MapPin, Link as LinkIcon, Edit2, UserCircle, Heart, Briefcase, GraduationCap, Globe, Languages, Cake, Camera, HelpCircle, Moon, Sun, LogOut, ChevronLeft, KeyRound } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { PostCard } from "@/components/feed/PostCard"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
@@ -7,6 +8,7 @@ import type { Post } from "@/mocks/types"
 import { Progress } from "@/components/ui/Progress"
 import { postApi, uploadApi } from "@/lib/api"
 import { useAuthStore } from "@/store/useAuthStore"
+import { useThemeStore } from "@/store/useThemeStore"
 
 const TABS = [
   { id: "activity", label: "Hoạt động", icon: Activity },
@@ -23,10 +25,15 @@ const ABOUT_SIDEBAR = [
 ]
 
 export function Profile() {
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState("activity")
   const [aboutTab, setAboutTab] = useState("overview")
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
+  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false)
+  const [settingsMenuView, setSettingsMenuView] = useState<"main" | "privacy">("main")
   const currentUser = useAuthStore((state) => state.user)
+  const logout = useAuthStore((state) => state.logout)
+  const { isDarkMode, toggleTheme } = useThemeStore()
   const updateDisplayName = useAuthStore((state) => state.updateDisplayName)
   const updateAvatar = useAuthStore((state) => state.updateAvatar)
   const updateCover = useAuthStore((state) => state.updateCover)
@@ -37,6 +44,7 @@ export function Profile() {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
+  const settingsMenuRef = useRef<HTMLDivElement>(null)
 
   const [userProfile, setUserProfile] = useState<any>({
     cover: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=1600",
@@ -54,6 +62,30 @@ export function Profile() {
       setProfileError("Khong tai duoc ho so tai khoan")
     })
   }, [refreshCurrentUser])
+
+  useEffect(() => {
+    if (!isSettingsMenuOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (settingsMenuRef.current?.contains(event.target as Node)) return
+      setIsSettingsMenuOpen(false)
+      setSettingsMenuView("main")
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsSettingsMenuOpen(false)
+        setSettingsMenuView("main")
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown)
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [isSettingsMenuOpen])
 
   useEffect(() => {
     const loadUserPosts = async () => {
@@ -139,6 +171,13 @@ export function Profile() {
 
   const cancelEdit = () => {
     setEditingField(null)
+  }
+
+  const handleLogout = async () => {
+    setIsSettingsMenuOpen(false)
+    setSettingsMenuView("main")
+    await logout()
+    navigate("/login", { replace: true })
   }
 
   const renderField = (field: string, label: string, icon: React.ReactNode, type: string = "text", options?: string[]) => {
@@ -274,7 +313,8 @@ export function Profile() {
               />
             </div>
 
-            <button
+            <div className="relative flex items-center gap-2" ref={settingsMenuRef}>
+              <button
               onClick={() => {
                 setActiveTab("about");
                 setAboutTab("overview");
@@ -291,7 +331,103 @@ export function Profile() {
             >
               <Edit2 className="w-4 h-4 group-hover:text-accent-blue transition-colors" />
               Chỉnh sửa hồ sơ
-            </button>
+              </button>
+
+              <button
+                type="button"
+                aria-label="Mo menu cai dat"
+                aria-expanded={isSettingsMenuOpen}
+                onClick={() => {
+                  setSettingsMenuView("main")
+                  setIsSettingsMenuOpen((isOpen) => !isOpen)
+                }}
+                className={cn(
+                  "h-10 w-10 flex items-center justify-center rounded-lg bg-panel border border-border hover:bg-panel-hover hover:border-accent-blue/50 transition-colors text-muted hover:text-accent-blue shadow-lg",
+                  isSettingsMenuOpen && "border-accent-blue/60 text-accent-blue bg-accent-blue/10"
+                )}
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+
+              {isSettingsMenuOpen && (
+                <div
+                  className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-border shadow-2xl z-50 overflow-hidden"
+                  style={{ backgroundColor: isDarkMode ? "#12181a" : "#ffffff" }}
+                >
+                  <div
+                    className="flex w-[200%] transition-transform duration-300 ease-out"
+                    style={{ transform: settingsMenuView === "privacy" ? "translateX(-50%)" : "translateX(0)" }}
+                  >
+                    <div className="w-1/2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setSettingsMenuView("privacy")}
+                    className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                  >
+                    <Settings className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
+                    <span className="font-medium">Cài đặt và quyền riêng tư</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                  >
+                    <HelpCircle className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
+                    <span className="font-medium">Trợ giúp và hỗ trợ</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleTheme}
+                    className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                  >
+                    {isDarkMode ? <Sun className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" /> : <Moon className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />}
+                    <span className="font-medium">{isDarkMode ? "Light Mode" : "Dark Mode"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-danger hover:bg-danger/10 transition-colors border-t border-border cursor-pointer"
+                  >
+                    <LogOut className="w-5 h-5 group-hover:scale-105 transition-transform" />
+                    <span className="font-medium">Đăng xuất</span>
+                  </button>
+                    </div>
+
+                    <div className="w-1/2 shrink-0">
+                      <div className="flex items-center gap-2 border-b border-border px-2 py-2">
+                        <button
+                          type="button"
+                          aria-label="Quay lai menu chinh"
+                          onClick={() => setSettingsMenuView("main")}
+                          className="h-8 w-8 flex items-center justify-center rounded-lg text-muted hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                        >
+                          <ChevronLeft className="w-5 h-5" />
+                        </button>
+                        <span className="text-sm font-bold text-foreground">Cài đặt và quyền riêng tư</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSettingsMenuOpen(false)
+                          setSettingsMenuView("main")
+                          navigate("/change-password")
+                        }}
+                        className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                      >
+                        <KeyRound className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
+                        <span className="font-medium">Đổi mật khẩu</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                      >
+                        <Languages className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
+                        <span className="font-medium">Ngôn ngữ</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-4">
