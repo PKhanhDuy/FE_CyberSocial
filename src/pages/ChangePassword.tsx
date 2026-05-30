@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, KeyRound, Lock, ShieldAlert, ShieldCheck } from "lucide-react"
 import { motion } from "framer-motion"
+import { useTranslation } from "react-i18next"
 import { useAuthStore } from "@/store/useAuthStore"
 import { cn } from "@/lib/utils"
 
@@ -9,6 +10,7 @@ type PasswordField = "current" | "next" | "confirm"
 
 export function ChangePassword() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { changePassword, error, isLoading, clearError } = useAuthStore()
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -22,7 +24,10 @@ export function ChangePassword() {
   const [isChanged, setIsChanged] = useState(false)
 
   useEffect(() => {
-    document.title = "Đổi mật khẩu | CyberSocial"
+    document.title = t("auth.changePassword.documentTitle")
+  }, [t])
+
+  useEffect(() => {
     clearError()
     return () => clearError()
   }, [clearError])
@@ -37,23 +42,23 @@ export function ChangePassword() {
     setIsChanged(false)
 
     if (!currentPassword) {
-      setValidationError("Vui lòng nhập mật khẩu hiện tại.")
+      setValidationError(t("auth.changePassword.validation.currentRequired"))
       return
     }
     if (!newPassword) {
-      setValidationError("Vui lòng nhập mật khẩu mới.")
+      setValidationError(t("auth.changePassword.validation.newRequired"))
       return
     }
     if (newPassword.length < 8) {
-      setValidationError("Mật khẩu mới phải có ít nhất 8 ký tự.")
+      setValidationError(t("auth.changePassword.validation.minLength"))
       return
     }
     if (newPassword === currentPassword) {
-      setValidationError("Mật khẩu mới phải khác mật khẩu hiện tại.")
+      setValidationError(t("auth.changePassword.validation.mustBeDifferent"))
       return
     }
     if (newPassword !== confirmPassword) {
-      setValidationError("Xác nhận mật khẩu không khớp.")
+      setValidationError(t("auth.changePassword.validation.confirmMismatch"))
       return
     }
 
@@ -93,7 +98,7 @@ export function ChangePassword() {
           type="button"
           onClick={() => toggleVisible(field)}
           disabled={isLoading}
-          aria-label={visibleFields[field] ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+          aria-label={visibleFields[field] ? t("auth.changePassword.hidePassword") : t("auth.changePassword.showPassword")}
           className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-muted hover:text-foreground transition-colors cursor-pointer disabled:cursor-not-allowed"
         >
           {visibleFields[field] ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
@@ -122,15 +127,15 @@ export function ChangePassword() {
               className="inline-flex items-center gap-2 text-sm text-muted hover:text-foreground transition-colors font-medium mb-5"
             >
               <ArrowLeft className="w-4 h-4" />
-              Hồ sơ
+              {t("auth.changePassword.backToProfile")}
             </Link>
             <div className="flex items-center gap-3">
               <div className="h-12 w-12 rounded-xl bg-accent-blue/10 border border-accent-blue/40 flex items-center justify-center neon-border-blue">
                 <KeyRound className="w-6 h-6 text-accent-blue" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold tracking-wider text-foreground">Đổi mật khẩu</h1>
-                <p className="text-sm text-muted font-mono">BẢO MẬT TÀI KHOẢN</p>
+                <h1 className="text-2xl font-bold tracking-wider text-foreground">{t("auth.changePassword.title")}</h1>
+                <p className="text-sm text-muted font-mono uppercase">{t("auth.changePassword.subtitle")}</p>
               </div>
             </div>
           </div>
@@ -156,15 +161,15 @@ export function ChangePassword() {
             >
               <CheckCircle2 className="w-5 h-5 text-success shrink-0 mt-0.5" />
               <div className="text-sm text-foreground/90 font-medium">
-                Đổi mật khẩu thành công.
+                {t("auth.changePassword.success")}
               </div>
             </motion.div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {renderPasswordInput("current-password", "Mật khẩu hiện tại", currentPassword, "current", setCurrentPassword)}
-            {renderPasswordInput("new-password", "Mật khẩu mới", newPassword, "next", setNewPassword)}
-            {renderPasswordInput("confirm-password", "Xác nhận mật khẩu", confirmPassword, "confirm", setConfirmPassword)}
+            {renderPasswordInput("current-password", t("auth.changePassword.currentPassword"), currentPassword, "current", setCurrentPassword)}
+            {renderPasswordInput("new-password", t("auth.changePassword.newPassword"), newPassword, "next", setNewPassword)}
+            {renderPasswordInput("confirm-password", t("auth.changePassword.confirmPassword"), confirmPassword, "confirm", setConfirmPassword)}
 
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <button
@@ -173,7 +178,7 @@ export function ChangePassword() {
                 disabled={isLoading}
                 className="px-4 py-3 rounded-xl border border-border text-sm font-bold text-muted hover:text-foreground hover:bg-panel-hover transition-colors cursor-pointer disabled:cursor-not-allowed"
               >
-                HỦY
+                {t("common.cancel")}
               </button>
               <button
                 type="submit"
@@ -186,11 +191,11 @@ export function ChangePassword() {
                 {isLoading ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ĐANG CẬP NHẬT...
+                    {t("common.updating")}
                   </>
                 ) : (
                   <>
-                    CẬP NHẬT <ShieldCheck className="w-4 h-4" />
+                    {t("common.update")} <ShieldCheck className="w-4 h-4" />
                   </>
                 )}
               </button>

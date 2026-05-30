@@ -1,21 +1,23 @@
 import { useState } from "react"
 import { NavLink } from "react-router-dom"
 import { Home, Compass, CheckCircle, User, Bell, Users } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { CreatePostModal } from "@/components/feed/CreatePostModal"
 import { useNotificationStore } from "@/store/useNotificationStore"
 import { useFriendStore } from "@/store/useFriendStore"
 
 const navItems = [
-  { icon: Home, label: "Trang chủ", path: "/" },
-  { icon: Compass, label: "Khám phá", path: "/explore" },
-  { icon: CheckCircle, label: "Tin xác thực", path: "/verified" },
-  { icon: Users, label: "Bạn bè", path: "/friends" },
-  { icon: Bell, label: "Thông báo", path: "/notifications" },
-  { icon: User, label: "Hồ sơ", path: "/profile" },
+  { icon: Home, labelKey: "nav.home", path: "/" },
+  { icon: Compass, labelKey: "nav.explore", path: "/explore" },
+  { icon: CheckCircle, labelKey: "nav.verifiedNews", path: "/verified" },
+  { icon: Users, labelKey: "nav.friends", path: "/friends" },
+  { icon: Bell, labelKey: "nav.notifications", path: "/notifications" },
+  { icon: User, labelKey: "nav.profile", path: "/profile" },
 ]
 
 export function LeftSidebar() {
+  const { t } = useTranslation()
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const unreadCount = useNotificationStore((state) => state.unreadCount())
   const incomingFriendRequestCount = useFriendStore((state) => state.incomingRequestCount)
@@ -58,7 +60,7 @@ export function LeftSidebar() {
                     </span>
                   )}
                 </div>
-                <span className="font-medium tracking-wide flex-1">{item.label}</span>
+                <span className="font-medium tracking-wide flex-1">{t(item.labelKey)}</span>
                 {isActive && (
                   <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-accent-blue rounded-r-full shadow-[var(--shadow-neon-blue)]" />
                 )}
@@ -73,7 +75,7 @@ export function LeftSidebar() {
           onClick={() => setIsCreateModalOpen(true)}
           className="w-full py-3 rounded-lg bg-accent-pink/20 text-accent-pink border border-accent-pink/50 hover:bg-accent-pink/30 transition-all duration-300 font-bold tracking-wider neon-border-pink cursor-pointer"
         >
-          BÀI VIẾT MỚI
+          {t("nav.createPost")}
         </button>
       </div>
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { ShieldAlert, Activity, User, MessageSquare, Heart, CheckCircle2, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useNotificationStore, type NotificationType } from "@/store/useNotificationStore"
+import { useTranslation } from "react-i18next"
 
 type FilterTab = "ALL" | "SOCIAL" | "SYSTEM"
 
@@ -13,6 +14,7 @@ export function Notifications() {
   const error = useNotificationStore((state) => state.error)
   const markAllAsRead = useNotificationStore((state) => state.markAllAsRead)
   const unreadCount = useNotificationStore((state) => state.unreadCount())
+  const { t } = useTranslation()
 
   useEffect(() => {
     loadNotifications()
@@ -60,10 +62,10 @@ export function Notifications() {
       {/* Header */}
       <div className="border-b border-border pb-4 sticky top-0 bg-background/80 backdrop-blur-md z-10 pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-wider text-foreground flex items-center gap-3">
-          CẢNH BÁO HỆ THỐNG
+          {t("nav.notifications")}
           {unreadCount > 0 && (
             <span className="bg-accent-pink text-white text-xs px-2 py-0.5 rounded-full font-mono font-bold animate-pulse">
-              {unreadCount} MỚI
+              {unreadCount} {t("notifications.new")}
             </span>
           )}
         </h1>
@@ -72,16 +74,16 @@ export function Notifications() {
           className="flex items-center gap-2 text-sm text-muted hover:text-accent-blue transition-colors"
         >
           <CheckCircle2 className="w-4 h-4" />
-          Đánh dấu đã đọc tất cả
+          {t("notifications.readAll")}
         </button>
       </div>
 
       {/* Filters */}
       <div className="flex gap-2 mb-6 border-b border-border">
         {[
-          { id: "ALL", label: "Tất Cả" },
-          { id: "SOCIAL", label: "Xã Hội" },
-          { id: "SYSTEM", label: "Hệ Thống" }
+          { id: "ALL", label: t("notifications.all") },
+          { id: "SOCIAL", label: t("notifications.social") },
+          { id: "SYSTEM", label: t("notifications.system") }
         ].map((tab) => (
           <button
             key={tab.id}
@@ -102,7 +104,7 @@ export function Notifications() {
       <div className="space-y-4">
         {isLoading && (
           <div className="text-center py-6 text-muted font-mono">
-            Dang dong bo thong bao...
+            {t("notifications.async")}
           </div>
         )}
 
@@ -163,7 +165,7 @@ export function Notifications() {
 
         {filteredNotifications.length === 0 && (
           <div className="text-center py-12 text-muted font-mono">
-            Không phát hiện tín hiệu nào trong khu vực này.
+            {t("notifications.noNoti")} 
           </div>
         )}
       </div>

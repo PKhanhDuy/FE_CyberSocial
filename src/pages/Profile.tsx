@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { ShieldCheck, Network, Activity, Settings, MapPin, Link as LinkIcon, Edit2, UserCircle, Heart, Briefcase, GraduationCap, Globe, Languages, Cake, Camera, HelpCircle, Moon, Sun, LogOut, ChevronLeft, KeyRound } from "lucide-react"
+import { ShieldCheck, Network, Activity, Settings, MapPin, Link as LinkIcon, Edit2, UserCircle, Heart, Briefcase, GraduationCap, Globe, Languages, Cake, Camera, HelpCircle, Moon, Sun, LogOut, ChevronLeft, KeyRound, Check } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { PostCard } from "@/components/feed/PostCard"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
@@ -9,31 +10,23 @@ import { Progress } from "@/components/ui/Progress"
 import { postApi, uploadApi } from "@/lib/api"
 import { useAuthStore } from "@/store/useAuthStore"
 import { useThemeStore } from "@/store/useThemeStore"
+import { useLanguageStore } from "@/store/useLanguageStore"
 
-const TABS = [
-  { id: "activity", label: "Hoạt động", icon: Activity },
-  { id: "about", label: "Giới thiệu", icon: UserCircle },
-  { id: "network", label: "Mạng lưới", icon: Network },
-  { id: "diagnostics", label: "Chuẩn đoán", icon: ShieldCheck },
-]
+type SettingsMenuView = "main" | "privacy" | "language"
 
-const ABOUT_SIDEBAR = [
-  { id: "overview", label: "Tổng quan" },
-  { id: "work_education", label: "Công việc & Học vấn" },
-  { id: "contact_basic", label: "Thông tin liên hệ & Cơ bản" },
-  { id: "details", label: "Chi tiết về bạn" }
-]
 
 export function Profile() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState("activity")
   const [aboutTab, setAboutTab] = useState("overview")
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false)
-  const [settingsMenuView, setSettingsMenuView] = useState<"main" | "privacy">("main")
+  const [settingsMenuView, setSettingsMenuView] = useState<SettingsMenuView>("main")
   const currentUser = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
   const { isDarkMode, toggleTheme } = useThemeStore()
+  const { language, setLanguage } = useLanguageStore()
   const updateDisplayName = useAuthStore((state) => state.updateDisplayName)
   const updateAvatar = useAuthStore((state) => state.updateAvatar)
   const updateCover = useAuthStore((state) => state.updateCover)
@@ -45,6 +38,20 @@ export function Profile() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
   const settingsMenuRef = useRef<HTMLDivElement>(null)
+
+  const TABS = [
+    { id: "activity", label: t("profile.activity"), icon: Activity },
+    { id: "about", label: t("profile.introduction"), icon: UserCircle },
+    { id: "network", label: t("profile.network"), icon: Network },
+    { id: "diagnostics", label: t("profile.predictions"), icon: ShieldCheck },
+  ]
+
+  const ABOUT_SIDEBAR = [
+    { id: "overview", label: t("profile.introductions.overview") },
+    { id: "work_education", label: t("profile.introductions.education") },
+    { id: "contact_basic", label: t("profile.introductions.contact") },
+    { id: "details", label: t("profile.introductions.details") }
+  ]
 
   const [userProfile, setUserProfile] = useState<any>({
     cover: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=1600",
@@ -180,6 +187,18 @@ export function Profile() {
     navigate("/login", { replace: true })
   }
 
+  const getSettingsMenuTransform = () => {
+    if (settingsMenuView === "privacy") return "translateX(-33.3333%)"
+    if (settingsMenuView === "language") return "translateX(-66.6667%)"
+    return "translateX(0)"
+  }
+
+  const handleLanguageChange = (nextLanguage: "vi" | "en") => {
+    setLanguage(nextLanguage)
+    setIsSettingsMenuOpen(false)
+    setSettingsMenuView("main")
+  }
+
   const renderField = (field: string, label: string, icon: React.ReactNode, type: string = "text", options?: string[]) => {
     const isEditing = editingField === field;
     const rawValue = userProfile[field];
@@ -200,7 +219,7 @@ export function Profile() {
                   onChange={(e) => setEditValue(e.target.value)}
                   className="w-full bg-background border border-accent-blue rounded-lg px-3 py-2 text-foreground outline-none focus:shadow-[var(--shadow-neon-blue)] transition-shadow"
                 >
-                  <option value="">Chọn {label.toLowerCase()}</option>
+                  <option value="">{label.toLowerCase()}</option>
                   {options.map(opt => (
                     <option key={opt} value={opt}>{opt}</option>
                   ))}
@@ -222,8 +241,8 @@ export function Profile() {
                 />
               )}
               <div className="flex gap-2 mt-2">
-                <button onClick={() => saveEdit(field)} className="px-4 py-1.5 bg-accent-blue text-black hover:bg-white rounded text-sm font-bold transition-colors shadow-[var(--shadow-neon-blue)]">LƯU</button>
-                <button onClick={cancelEdit} className="px-4 py-1.5 bg-[#2a2a40] text-muted hover:bg-red-500/20 hover:text-red-500 rounded text-sm font-bold transition-colors">HỦY</button>
+                <button onClick={() => saveEdit(field)} className="px-4 py-1.5 bg-accent-blue text-black hover:bg-white rounded text-sm font-bold transition-colors shadow-[var(--shadow-neon-blue)]">{t("profile.settings.save")}</button>
+                <button onClick={cancelEdit} className="px-4 py-1.5 bg-[#2a2a40] text-muted hover:bg-red-500/20 hover:text-red-500 rounded text-sm font-bold transition-colors">{t("profile.settings.cancel")}</button>
               </div>
             </div>
           ) : (
@@ -234,11 +253,11 @@ export function Profile() {
                   onClick={() => startEdit(field, rawValue)}
                   className="text-muted hover:text-accent-blue opacity-0 group-hover:opacity-100 transition-all flex items-center gap-1 text-xs bg-background px-2 py-1 rounded border border-border hover:border-accent-blue"
                 >
-                  <Edit2 className="w-3 h-3" /> Chỉnh sửa
+                  <Edit2 className="w-3 h-3" /> {t("profile.settings.modify")}
                 </button>
               </div>
               <div className="text-foreground mt-1 font-medium leading-relaxed">
-                {displayValue || <span className="text-muted italic font-normal">Chưa có thông tin</span>}
+                {displayValue || <span className="text-muted italic font-normal">{t("profile.introductions.overviewContent.noInfo")}</span>}
               </div>
             </div>
           )}
@@ -315,27 +334,27 @@ export function Profile() {
 
             <div className="relative flex items-center gap-2" ref={settingsMenuRef}>
               <button
-              onClick={() => {
-                setActiveTab("about");
-                setAboutTab("overview");
-                setTimeout(() => {
-                  const tabs = document.getElementById("profile-tabs");
-                  if (tabs) {
-                    // Scroll to tabs with a small offset for smooth UX
-                    const y = tabs.getBoundingClientRect().top + window.scrollY - 20;
-                    window.scrollTo({ top: y, behavior: 'smooth' });
-                  }
-                }, 100);
-              }}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-panel border border-border hover:bg-panel-hover hover:border-accent-blue/50 transition-colors text-sm font-medium text-foreground shadow-lg group"
-            >
-              <Edit2 className="w-4 h-4 group-hover:text-accent-blue transition-colors" />
-              Chỉnh sửa hồ sơ
+                onClick={() => {
+                  setActiveTab("about");
+                  setAboutTab("overview");
+                  setTimeout(() => {
+                    const tabs = document.getElementById("profile-tabs");
+                    if (tabs) {
+                      // Scroll to tabs with a small offset for smooth UX
+                      const y = tabs.getBoundingClientRect().top + window.scrollY - 20;
+                      window.scrollTo({ top: y, behavior: 'smooth' });
+                    }
+                  }, 100);
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-panel border border-border hover:bg-panel-hover hover:border-accent-blue/50 transition-colors text-sm font-medium text-foreground shadow-lg group"
+              >
+                <Edit2 className="w-4 h-4 group-hover:text-accent-blue transition-colors" />
+                {t("profile.editProfile")}
               </button>
 
               <button
                 type="button"
-                aria-label="Mo menu cai dat"
+                aria-label={t("profile.settings.menuLabel")}
                 aria-expanded={isSettingsMenuOpen}
                 onClick={() => {
                   setSettingsMenuView("main")
@@ -355,54 +374,54 @@ export function Profile() {
                   style={{ backgroundColor: isDarkMode ? "#12181a" : "#ffffff" }}
                 >
                   <div
-                    className="flex w-[200%] transition-transform duration-300 ease-out"
-                    style={{ transform: settingsMenuView === "privacy" ? "translateX(-50%)" : "translateX(0)" }}
+                    className="flex w-[300%] transition-transform duration-300 ease-out"
+                    style={{ transform: getSettingsMenuTransform() }}
                   >
-                    <div className="w-1/2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setSettingsMenuView("privacy")}
-                    className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
-                  >
-                    <Settings className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
-                    <span className="font-medium">Cài đặt và quyền riêng tư</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
-                  >
-                    <HelpCircle className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
-                    <span className="font-medium">Trợ giúp và hỗ trợ</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={toggleTheme}
-                    className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
-                  >
-                    {isDarkMode ? <Sun className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" /> : <Moon className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />}
-                    <span className="font-medium">{isDarkMode ? "Light Mode" : "Dark Mode"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-danger hover:bg-danger/10 transition-colors border-t border-border cursor-pointer"
-                  >
-                    <LogOut className="w-5 h-5 group-hover:scale-105 transition-transform" />
-                    <span className="font-medium">Đăng xuất</span>
-                  </button>
+                    <div className="w-1/3 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setSettingsMenuView("privacy")}
+                        className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                      >
+                        <Settings className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
+                        <span className="font-medium">{t("profile.settings.title")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                      >
+                        <HelpCircle className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
+                        <span className="font-medium">{t("profile.settings.help")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={toggleTheme}
+                        className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                      >
+                        {isDarkMode ? <Sun className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" /> : <Moon className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />}
+                        <span className="font-medium">{isDarkMode ? t("profile.settings.lightMode") : t("profile.settings.darkMode")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-danger hover:bg-danger/10 transition-colors border-t border-border cursor-pointer"
+                      >
+                        <LogOut className="w-5 h-5 group-hover:scale-105 transition-transform" />
+                        <span className="font-medium">{t("profile.settings.logout")}</span>
+                      </button>
                     </div>
 
-                    <div className="w-1/2 shrink-0">
+                    <div className="w-1/3 shrink-0">
                       <div className="flex items-center gap-2 border-b border-border px-2 py-2">
                         <button
                           type="button"
-                          aria-label="Quay lai menu chinh"
+                          aria-label={t("common.back")}
                           onClick={() => setSettingsMenuView("main")}
                           className="h-8 w-8 flex items-center justify-center rounded-lg text-muted hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
                         >
                           <ChevronLeft className="w-5 h-5" />
                         </button>
-                        <span className="text-sm font-bold text-foreground">Cài đặt và quyền riêng tư</span>
+                        <span className="text-sm font-bold text-foreground">{t("profile.settings.title")}</span>
                       </div>
                       <button
                         type="button"
@@ -414,14 +433,47 @@ export function Profile() {
                         className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
                       >
                         <KeyRound className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
-                        <span className="font-medium">Đổi mật khẩu</span>
+                        <span className="font-medium">{t("profile.settings.changePassword")}</span>
                       </button>
                       <button
                         type="button"
+                        onClick={() => setSettingsMenuView("language")}
                         className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
                       >
                         <Languages className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
-                        <span className="font-medium">Ngôn ngữ</span>
+                        <span className="font-medium">{t("profile.settings.language")}</span>
+                      </button>
+                    </div>
+
+                    <div className="w-1/3 shrink-0">
+                      <div className="flex items-center gap-2 border-b border-border px-2 py-2">
+                        <button
+                          type="button"
+                          aria-label={t("common.back")}
+                          onClick={() => setSettingsMenuView("privacy")}
+                          className="h-8 w-8 flex items-center justify-center rounded-lg text-muted hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                        >
+                          <ChevronLeft className="w-5 h-5" />
+                        </button>
+                        <span className="text-sm font-bold text-foreground">{t("profile.settings.languageTitle")}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleLanguageChange("vi")}
+                        className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                      >
+                        <Languages className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
+                        <span className="font-medium flex-1">{t("profile.settings.vietnamese")}</span>
+                        {language === "vi" && <Check className="w-4 h-4 text-accent-blue" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleLanguageChange("en")}
+                        className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                      >
+                        <Languages className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
+                        <span className="font-medium flex-1">{t("profile.settings.english")}</span>
+                        {language === "en" && <Check className="w-4 h-4 text-accent-blue" />}
                       </button>
                     </div>
                   </div>
@@ -436,7 +488,7 @@ export function Profile() {
                 {userProfile.username}
                 {userProfile.isVerified && (
                   <span className="text-xs bg-accent-blue/10 text-accent-blue border border-accent-blue/30 px-2 py-0.5 rounded uppercase tracking-widest font-mono">
-                    Đã Xác Thực
+                    {t("profile.verified")}
                   </span>
                 )}
               </h1>
@@ -564,38 +616,38 @@ export function Profile() {
             <div className="flex-1 glass-panel border border-border rounded-xl p-2 sm:p-6 min-h-[400px]">
               {aboutTab === "overview" && (
                 <div className="space-y-2 animate-in fade-in duration-300">
-                  <h3 className="text-xl font-bold text-foreground mb-4 border-b border-border pb-2 px-4">Tổng quan</h3>
-                  {renderField("job", "Công việc", <Briefcase className="w-5 h-5" />)}
-                  {renderField("school", "Trường học", <GraduationCap className="w-5 h-5" />)}
-                  {renderField("hometown", "Nơi sống hiện tại", <MapPin className="w-5 h-5" />)}
-                  {renderField("maritalStatus", "Tình trạng", <Heart className="w-5 h-5" />, "text", ["Độc thân", "Đang hẹn hò", "Đã kết hôn", "Phức tạp"])}
+                  <h3 className="text-xl font-bold text-foreground mb-4 border-b border-border pb-2 px-4">{t("profile.introductions.overview")}</h3>
+                  {renderField("job", t("profile.introductions.overviewContent.work"), <Briefcase className="w-5 h-5" />)}
+                  {renderField("school", t("profile.introductions.overviewContent.school"), <GraduationCap className="w-5 h-5" />)}
+                  {renderField("hometown", t("profile.introductions.overviewContent.location"), <MapPin className="w-5 h-5" />)}
+                  {renderField("maritalStatus", t("profile.introductions.overviewContent.status"), <Heart className="w-5 h-5" />, "text", Object.values(t("profile.introductions.overviewContent.statusOptions", { returnObjects: true })))}
                 </div>
               )}
 
               {aboutTab === "work_education" && (
                 <div className="space-y-2 animate-in fade-in duration-300">
-                  <h3 className="text-xl font-bold text-foreground mb-4 border-b border-border pb-2 px-4">Công việc & Học vấn</h3>
-                  {renderField("job", "Công việc hiện tại", <Briefcase className="w-5 h-5" />)}
-                  {renderField("educationLevel", "Trình độ học vấn", <GraduationCap className="w-5 h-5" />, "text", ["Trung học", "Cử nhân", "Thạc sĩ", "Tiến sĩ", "Giáo sư"])}
-                  {renderField("school", "Trường học / Viện nghiên cứu", <GraduationCap className="w-5 h-5" />)}
+                  <h3 className="text-xl font-bold text-foreground mb-4 border-b border-border pb-2 px-4">{t("profile.introductions.education")}</h3>
+                  {renderField("job", t("profile.introductions.educationContent.job"), <Briefcase className="w-5 h-5" />)}
+                  {renderField("educationLevel", t("profile.introductions.educationContent.educationLevel"), <GraduationCap className="w-5 h-5" />, "text", Object.values(t("profile.introductions.educationContent.levelOptions", { returnObjects: true })))}
+                  {renderField("school", t("profile.introductions.educationContent.school"), <GraduationCap className="w-5 h-5" />)}
                 </div>
               )}
 
               {aboutTab === "contact_basic" && (
                 <div className="space-y-2 animate-in fade-in duration-300">
-                  <h3 className="text-xl font-bold text-foreground mb-4 border-b border-border pb-2 px-4">Thông tin liên hệ & Cơ bản</h3>
-                  {renderField("gender", "Giới tính", <UserCircle className="w-5 h-5" />, "text", ["Nam", "Nữ", "Khác"])}
-                  {renderField("birthday", "Ngày sinh", <Cake className="w-5 h-5" />, "date")}
-                  {renderField("language", "Ngôn ngữ", <Languages className="w-5 h-5" />)}
-                  {renderField("nationality", "Quốc tịch", <Globe className="w-5 h-5" />)}
+                  <h3 className="text-xl font-bold text-foreground mb-4 border-b border-border pb-2 px-4">{t("profile.introductions.contact")}</h3>
+                  {renderField("gender", t("profile.introductions.contactContent.gender"), <UserCircle className="w-5 h-5" />, "text", Object.values(t("profile.introductions.contactContent.genderOptions", { returnObjects: true })))}
+                  {renderField("birthday", t("profile.introductions.contactContent.birthday"), <Cake className="w-5 h-5" />, "date")}
+                  {renderField("language", t("profile.introductions.contactContent.language"), <Languages className="w-5 h-5" />)}
+                  {renderField("nationality", t("profile.introductions.contactContent.nationlity"), <Globe className="w-5 h-5" />)}
                 </div>
               )}
 
               {aboutTab === "details" && (
                 <div className="space-y-2 animate-in fade-in duration-300">
-                  <h3 className="text-xl font-bold text-foreground mb-4 border-b border-border pb-2 px-4">Chi tiết về bạn</h3>
-                  {renderField("bio", "Tiểu sử (Mô tả bản thân)", <UserCircle className="w-5 h-5" />, "textarea")}
-                  {renderField("hobbies", "Sở thích (Ngăn cách bằng dấu phẩy)", <Heart className="w-5 h-5" />)}
+                  <h3 className="text-xl font-bold text-foreground mb-4 border-b border-border pb-2 px-4">{t("profile.introductions.details")}</h3>
+                  {renderField("bio", t("profile.introductions.detailsContent.bio"), <UserCircle className="w-5 h-5" />, "textarea")}
+                  {renderField("hobbies", t("profile.introductions.detailsContent.favorite"), <Heart className="w-5 h-5" />)}
                 </div>
               )}
             </div>
@@ -605,9 +657,9 @@ export function Profile() {
         {activeTab === "network" && (
           <div className="glass-panel border border-border p-8 flex flex-col items-center justify-center text-center rounded-xl h-64">
             <Network className="w-12 h-12 text-accent-blue mb-4 opacity-50" />
-            <h3 className="text-lg font-bold tracking-widest text-foreground mb-2">MA TRẬN MẠNG LƯỚI THẦN KINH</h3>
+            <h3 className="text-lg font-bold tracking-widest text-foreground mb-2">{t("profile.networkContent.title")}</h3>
             <p className="text-muted max-w-md">
-              Hình ảnh hóa các kết nối node và đường truyền dữ liệu hiện đang đồng bộ hóa với lõi trung tâm.
+              {t("profile.networkContent.description")}
             </p>
           </div>
         )}
@@ -618,7 +670,7 @@ export function Profile() {
             <div className="bg-panel border border-border rounded-xl p-6 space-y-6">
               <div className="flex items-center gap-2 border-b border-border pb-4">
                 <Settings className="w-5 h-5 text-accent-blue" />
-                <h3 className="font-bold tracking-wider text-foreground">TÍNH TOÀN VẸN HỆ THỐNG</h3>
+                <h3 className="font-bold tracking-wider text-foreground">{t("profile.predictionsContent.systemIntegrity")}</h3>
               </div>
 
               <div className="space-y-4">
@@ -650,7 +702,7 @@ export function Profile() {
             <div className="bg-panel border border-border rounded-xl p-6">
               <div className="flex items-center gap-2 border-b border-border pb-4 mb-6">
                 <ShieldCheck className="w-5 h-5 text-accent-blue" />
-                <h3 className="font-bold tracking-wider text-foreground">GIAO THỨC TRUY CẬP</h3>
+                <h3 className="font-bold tracking-wider text-foreground">{t("profile.predictionsContent.accessProtocol")}</h3>
               </div>
 
               <div className="space-y-3">

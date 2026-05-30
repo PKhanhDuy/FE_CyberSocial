@@ -1,5 +1,6 @@
 import type { User } from "@/mocks/types"
 import type { NotificationType } from "@/store/useNotificationStore"
+import { getStoredLanguage } from "@/i18n"
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080").replace(/\/$/, "")
 const ACCESS_TOKEN_KEY = "cybersocial_access_token"
@@ -151,6 +152,7 @@ async function apiRequest<T>(path: string, init: RequestInit = {}, retry = true)
   const token = getAccessToken()
   const headers = new Headers(init.headers)
   headers.set("Accept", "application/json")
+  headers.set("Accept-Language", getStoredLanguage())
 
   if (init.body && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json")

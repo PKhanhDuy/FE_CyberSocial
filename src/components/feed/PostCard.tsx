@@ -7,6 +7,7 @@ import { Heart, MessageSquare, Repeat2, Share, ShieldAlert, ShieldCheck, Activit
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { useAuthStore } from "@/store/useAuthStore"
+import {useTranslation} from "react-i18next"
 
 interface PostCardProps {
   post: Post
@@ -19,6 +20,7 @@ export function PostCard({ post, onViewAnalysis }: PostCardProps) {
   const isVerified = post.aiState === "verified"
   const isMonitoring = post.aiState === "monitoring"
   const authorAvatar = currentUser?.id === post.author.id ? currentUser.avatar : post.author.avatar
+  const { t } = useTranslation()
 
   return (
     <motion.div
@@ -43,9 +45,9 @@ export function PostCard({ post, onViewAnalysis }: PostCardProps) {
           {isVerified && <ShieldCheck className="w-4 h-4" />}
           {isMonitoring && <Activity className="w-4 h-4 animate-pulse" />}
           <span>
-            {isSuspicious ? "AI PHÁT HIỆN LAN TRUYỀN ĐÁNG NGỜ" :
-              isVerified ? "AI XÁC THỰC: BÀI VIẾT AN TOÀN" :
-                "AI ĐANG GIÁM SÁT LAN TRUYỀN..."}
+            {isSuspicious ? t("post.isSuspicious") :
+              isVerified ? t("post.isVerified") :
+                t("post.isMonitoring")}
           </span>
         </div>
         {isMonitoring && (
@@ -80,7 +82,7 @@ export function PostCard({ post, onViewAnalysis }: PostCardProps) {
             </div>
           </div>
           <div className="text-right">
-            <div className="text-xs text-muted">Độ tin cậy</div>
+            <div className="text-xs text-muted">{t("post.trustScore")}</div>
             <div className={cn("font-mono font-bold", post.author.trustScore > 80 ? "text-green-400" : post.author.trustScore < 50 ? "text-accent-pink" : "text-yellow-400")}>
               {post.author.trustScore}%
             </div>
@@ -98,7 +100,7 @@ export function PostCard({ post, onViewAnalysis }: PostCardProps) {
               <div className="absolute inset-0 bg-accent-pink/10 pointer-events-none flex items-center justify-center">
                 <div className="bg-panel/ backdrop-blur-md border border-accent-pink/50 text-accent-pink px-4 py-2 rounded-full font-bold text-sm tracking-wider uppercase flex items-center gap-2 shadow-[var(--shadow-neon-pink)]">
                   <ShieldAlert className="w-4 h-4" />
-                  Xác suất Deepfake: {(post.aiAnalysis!.fakeProbability * 100).toFixed(0)}%
+                  {t("post.fakeProbability")}: {(post.aiAnalysis!.fakeProbability * 100).toFixed(0)}%
                 </div>
               </div>
             )}
@@ -108,9 +110,9 @@ export function PostCard({ post, onViewAnalysis }: PostCardProps) {
         {isSuspicious && (
           <div className="bg-accent-pink/5 border border-accent-pink/30 rounded-lg p-4 mb-4">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-bold text-accent-pink">Mức độ rủi ro: {post.aiAnalysis?.riskLevel}</span>
+              <span className="text-sm font-bold text-accent-pink">{t("post.riskLevel")}: {post.aiAnalysis?.riskLevel}</span>
               <Button variant="neon-pink" size="sm" onClick={() => onViewAnalysis(post)}>
-                XEM PHÂN TÍCH AI
+                {t("post.viewAnalysis")}
               </Button>
             </div>
             <ul className="text-xs text-muted space-y-1 list-disc pl-4">

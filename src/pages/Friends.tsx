@@ -5,13 +5,14 @@ import { Button } from "@/components/ui/Button"
 import { friendApi, type FriendUser, type Friendship } from "@/lib/api"
 import { useFriendStore } from "@/store/useFriendStore"
 import { cn } from "@/lib/utils"
+import { useTranslation } from "react-i18next"
 
 type TabId = "friends" | "incoming" | "outgoing"
 
-const TABS: Array<{ id: TabId; label: string }> = [
-  { id: "friends", label: "Bạn bè" },
-  { id: "incoming", label: "Lời mời" },
-  { id: "outgoing", label: "Đã gửi" },
+const TABS: Array<{ id: TabId; labelKey: string }> = [
+  { id: "friends", labelKey: "nav.friends" },
+  { id: "incoming", labelKey: "friends.invitation" },
+  { id: "outgoing", labelKey: "friends.sent" },
 ]
 
 const makeHandle = (value: string) => `@${value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")}`
@@ -47,12 +48,14 @@ interface FriendshipRowProps {
 }
 
 function FriendshipRow({ friendship, kind, onAccept, onDeleteRequest, onRemoveFriend, isBusy }: FriendshipRowProps) {
+  const { t } = useTranslation()
+
   if (kind === "friends") {
     return (
-      <PersonRow user={friendship.user} subtitle="Đã kết nối">
+      <PersonRow user={friendship.user} subtitle={t("friends.connected")}>
         <Button size="sm" variant="outline" disabled={isBusy} onClick={() => onRemoveFriend(friendship.id)}>
           <UserMinus className="w-4 h-4 mr-2" />
-          Hủy bạn
+          {t("friends.cancel")}
         </Button>
       </PersonRow>
     )
@@ -63,7 +66,7 @@ function FriendshipRow({ friendship, kind, onAccept, onDeleteRequest, onRemoveFr
       <PersonRow user={friendship.user} subtitle="Đã gửi lời mời cho bạn">
         <Button size="sm" variant="neon-blue" disabled={isBusy} onClick={() => onAccept(friendship.id)}>
           <Check className="w-4 h-4 mr-2" />
-          Chấp nhận
+          {t("friends.accept")}
         </Button>
         <Button size="icon" variant="outline" disabled={isBusy} onClick={() => onDeleteRequest(friendship.id)} title="Từ chối">
           <X className="w-4 h-4" />
@@ -73,16 +76,17 @@ function FriendshipRow({ friendship, kind, onAccept, onDeleteRequest, onRemoveFr
   }
 
   return (
-    <PersonRow user={friendship.user} subtitle="Đang chờ phản hồi">
+    <PersonRow user={friendship.user} subtitle={t("friends.pendingRes")}>
       <Button size="sm" variant="outline" disabled={isBusy} onClick={() => onDeleteRequest(friendship.id)}>
         <X className="w-4 h-4 mr-2" />
-        Hủy lời mời
+        {t("friends.cancelRequest")}
       </Button>
     </PersonRow>
   )
 }
 
 export function Friends() {
+  const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState<TabId>("friends")
   const [friends, setFriends] = useState<Friendship[]>([])
   const [incoming, setIncoming] = useState<Friendship[]>([])
@@ -94,7 +98,6 @@ export function Friends() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const loadIncomingRequestCount = useFriendStore((state) => state.loadIncomingRequestCount)
-
   const activeList = useMemo(() => {
     if (activeTab === "incoming") return incoming
     if (activeTab === "outgoing") return outgoing
@@ -114,7 +117,7 @@ export function Friends() {
       setOutgoing(outgoingData)
       loadIncomingRequestCount()
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Không tải được danh sách bạn bè")
+      setError(error instanceof Error ? error.message : t("friends.noDownload"))
     } finally {
       setIsLoading(false)
     }
@@ -138,7 +141,7 @@ export function Friends() {
         const response = await friendApi.search(query)
         setSearchResults(response.content)
       } catch (error) {
-        setError(error instanceof Error ? error.message : "Không tìm kiếm được người dùng")
+        setError(error instanceof Error ? error.message : t("friends.noFound"))
       } finally {
         setIsSearching(false)
       }
@@ -162,7 +165,7 @@ export function Friends() {
       await action()
       await refreshAfterAction()
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Không thể cập nhật kết nối")
+      setError(error instanceof Error ? error.message : t("friends.noAcceptInvitation"))
     } finally {
       setBusyId(null)
     }
@@ -170,14 +173,14 @@ export function Friends() {
 
   const renderSearchAction = (user: FriendUser) => {
     if (user.relationshipStatus === "ACCEPTED") {
-      return <span className="text-sm text-green-400 font-bold">Bạn bè</span>
+      return <span className="text-sm text-green-400 font-bold">{t("nav.friends")}</span>
     }
 
     if (user.relationshipStatus === "PENDING") {
       return (
         <Button size="sm" variant="outline" disabled={busyId === user.friendshipId} onClick={() => user.friendshipId && runAction(user.friendshipId, () => friendApi.deleteRequest(user.friendshipId!))}>
           <X className="w-4 h-4 mr-2" />
-          Hủy lời mời
+          {t("friends.cancelRequest")}
         </Button>
       )
     }
@@ -185,7 +188,7 @@ export function Friends() {
     return (
       <Button size="sm" variant="neon-blue" disabled={busyId === user.id} onClick={() => runAction(user.id, () => friendApi.sendRequest(user.id))}>
         <UserPlus className="w-4 h-4 mr-2" />
-        Kết bạn
+        {t("friends.addFriend")}
       </Button>
     )
   }
@@ -195,9 +198,9 @@ export function Friends() {
       <div>
         <h1 className="text-2xl font-bold text-foreground tracking-wider flex items-center gap-3">
           <Users className="w-6 h-6 text-accent-blue" />
-          Bạn bè
+          {t("nav.friends")}
         </h1>
-        <p className="text-muted mt-2">Tìm kiếm, quản lý bạn bè và lời mời kết nối của bạn.</p>
+        <p className="text-muted mt-2">{t("friends.description")}</p>
       </div>
 
       <div className="relative">
@@ -205,7 +208,7 @@ export function Friends() {
         <input
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder="Tìm bạn bè theo tên hoặc email..."
+          placeholder={t("friends.findPlaceholder")}
           className="w-full bg-panel border border-border rounded-lg pl-12 pr-4 py-3 text-foreground outline-none focus:border-accent-blue focus:shadow-[var(--shadow-neon-blue)]"
         />
       </div>
@@ -219,8 +222,8 @@ export function Friends() {
       {searchQuery.trim() && (
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-foreground">Kết quả tìm kiếm</h2>
-            {isSearching && <span className="text-sm text-muted font-mono">Đang tìm...</span>}
+            <h2 className="text-lg font-bold text-foreground">{t("friends.findResults")}</h2>
+            {isSearching && <span className="text-sm text-muted font-mono">{t("friends.finding")}</span>}
           </div>
           <div className="space-y-3">
             {searchResults.map((user) => (
@@ -230,7 +233,7 @@ export function Friends() {
             ))}
             {!isSearching && searchResults.length === 0 && (
               <div className="text-center py-6 text-muted font-mono border border-border rounded-lg bg-panel/50">
-                Không tìm thấy người dùng phù hợp.
+                {t("friends.noFound")}
               </div>
             )}
           </div>
@@ -249,7 +252,7 @@ export function Friends() {
                 : "border-transparent text-muted hover:text-foreground"
             )}
           >
-            {tab.label}
+            {t(tab.labelKey)}
             <span className="ml-2 text-xs text-muted">
               {tab.id === "friends" ? friends.length : tab.id === "incoming" ? incoming.length : outgoing.length}
             </span>
@@ -259,7 +262,7 @@ export function Friends() {
 
       <section className="space-y-3">
         {isLoading && (
-          <div className="text-center py-8 text-muted font-mono">Đang tải danh sách...</div>
+          <div className="text-center py-8 text-muted font-mono">{t("friends.downloading")}</div>
         )}
 
         {!isLoading && activeList.map((friendship) => (
@@ -276,9 +279,9 @@ export function Friends() {
 
         {!isLoading && activeList.length === 0 && (
           <div className="text-center py-8 text-muted font-mono border border-border rounded-lg bg-panel/50">
-            {activeTab === "friends" && "Bạn chưa có kết nối nào."}
-            {activeTab === "incoming" && "Không có lời mời kết bạn mới."}
-            {activeTab === "outgoing" && "Bạn chưa gửi lời mời nào đang chờ."}
+            {activeTab === "friends" && t("friends.noFriends")}
+            {activeTab === "incoming" && t("friends.noInvitations")}
+            {activeTab === "outgoing" && t("friends.noSent")}
           </div>
         )}
       </section>

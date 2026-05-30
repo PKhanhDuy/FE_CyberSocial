@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils"
 export function Login() {
   const navigate = useNavigate()
   const { login, error, isLoading, clearError } = useAuthStore()
-
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -17,7 +16,7 @@ export function Login() {
 
   // Update document title for SEO
   useEffect(() => {
-    document.title = "Đăng nhập | CyberSocial - Mạng xã hội tin cậy lượng tử"
+    document.title = "Đăng nhập | CyberSocial - Mạng xã hội tin cậy"
     clearError()
     return () => clearError()
   }, [clearError])
@@ -101,7 +100,7 @@ export function Login() {
                 <input
                   id="email"
                   type="email"
-                  placeholder="nhap-email@cybersocial.vn"
+                  placeholder="email@cybersocial.vn"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isLoading}
@@ -173,11 +172,11 @@ export function Login() {
               {isLoading ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ĐANG ĐĂNG NHẬP...
+                  Đang đăng nhập...
                 </>
               ) : (
                 <>
-                  ĐĂNG NHẬP <LogIn className="w-4 h-4" />
+                  Đăng nhập <LogIn className="w-4 h-4" />
                 </>
               )}
             </button>
@@ -186,7 +185,7 @@ export function Login() {
           {/* Bottom links */}
           <div className="mt-8 pt-6 border-t border-border/60 text-center">
             <p className="text-sm text-muted">
-              Bạn chưa có tài khoản?{" "}
+               Bạn chưa có tài khoản?{" "}
               <Link
                 to="/register"
                 className="text-accent-pink hover:text-accent-pink/80 transition-colors font-bold inline-flex items-center gap-1 group"

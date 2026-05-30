@@ -3,6 +3,7 @@ import { MOCK_POSTS } from "@/mocks/data"
 import { PostCard } from "./PostCard"
 import type { Post } from "@/mocks/types"
 import { postApi } from "@/lib/api"
+import {useTranslation} from "react-i18next"
 
 interface FeedListProps {
   searchQuery?: string
@@ -32,6 +33,7 @@ export function FeedList({ searchQuery = "", onViewAnalysis }: FeedListProps) {
   const [posts, setPosts] = useState<Post[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { t } = useTranslation()
 
   const loadPosts = useCallback(async () => {
     const normalizedQuery = searchQuery.trim()
@@ -41,7 +43,7 @@ export function FeedList({ searchQuery = "", onViewAnalysis }: FeedListProps) {
       const response = normalizedQuery ? await postApi.search(normalizedQuery) : await postApi.list()
       setPosts(filterPosts(response.content, normalizedQuery))
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Khong tai duoc bang tin")
+      setError(error instanceof Error ? error.message : t("post.noPostLoad"))
       setPosts(filterPosts(MOCK_POSTS, normalizedQuery))
     } finally {
       setIsLoading(false)
@@ -61,7 +63,7 @@ export function FeedList({ searchQuery = "", onViewAnalysis }: FeedListProps) {
     <div className="space-y-2 mt-6 pb-20">
       {isLoading && (
         <div className="text-center py-8 text-muted font-mono">
-          Dang tai bang tin...
+          {t("post.downloading")}
         </div>
       )}
 
@@ -77,7 +79,7 @@ export function FeedList({ searchQuery = "", onViewAnalysis }: FeedListProps) {
 
       {!isLoading && posts.length === 0 && (
         <div className="text-center py-8 text-muted font-mono">
-          {searchQuery.trim() ? "Khong tim thay bai viet phu hop." : "Chua co bai viet nao."}
+          {searchQuery.trim() ? t("post.notFound") : t("post.noPosts")}
         </div>
       )}
     </div>

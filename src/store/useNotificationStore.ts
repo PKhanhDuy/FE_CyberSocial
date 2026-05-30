@@ -1,6 +1,5 @@
 import { create } from "zustand"
 import { notificationApi } from "@/lib/api"
-
 export type NotificationType = "system_alert" | "ai_update" | "social_like" | "social_comment" | "social_follow" | "network_alert"
 
 export interface AppNotification {
