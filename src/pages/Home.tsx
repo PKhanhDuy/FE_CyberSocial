@@ -4,6 +4,7 @@ import { FeedList } from "@/components/feed/FeedList"
 import type { Post } from "@/mocks/types"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
 import { useTranslation } from "react-i18next"
+import { StoriesTray } from "@/components/stories/StoriesTray"
 
 export function Home() {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
@@ -27,6 +28,7 @@ export function Home() {
           />
         </div>
       </div>
+      <StoriesTray />
       <FeedList searchQuery={searchQuery} onViewAnalysis={setSelectedPost} />
       {selectedPost && (
         <AIAnalysisModal post={selectedPost} onClose={() => setSelectedPost(null)} />

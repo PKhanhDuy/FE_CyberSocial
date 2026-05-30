@@ -62,6 +62,82 @@ export interface UploadedImage {
   url: string
 }
 
+export interface BackendMusicTrack {
+  id: string
+  title: string
+  artist: string
+  audioUrl: string
+  coverUrl?: string
+  durationSeconds: number
+}
+
+export interface BackendStoryMedia {
+  id: string
+  mediaType: "IMAGE" | "VIDEO"
+  mediaUrl: string
+  thumbnailUrl?: string
+  width?: number
+  height?: number
+  durationMs?: number
+}
+
+export interface BackendStoryAuthor {
+  id: string
+  displayName: string
+  avatarUrl?: string
+}
+
+export interface BackendStoryViewer {
+  userId: string
+  displayName: string
+  avatarUrl?: string
+  viewedAt: string
+}
+
+export interface BackendStoryReactionSummary {
+  userId: string
+  displayName: string
+  avatarUrl?: string
+  reactionType: string
+  createdAt: string
+}
+
+export interface BackendStory {
+  id: string
+  author: BackendStoryAuthor
+  caption?: string
+  visibility: "PUBLIC" | "FRIENDS" | "PRIVATE"
+  media: BackendStoryMedia
+  music?: BackendMusicTrack
+  musicStartMs?: number
+  musicDurationMs?: number
+  viewCount: number
+  reactionCount: number
+  viewedByCurrentUser: boolean
+  currentUserReaction?: string
+  viewers?: BackendStoryViewer[]
+  reactions?: BackendStoryReactionSummary[]
+  expiresAt: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface StoryCreatePayload {
+  caption?: string
+  visibility?: "PUBLIC" | "FRIENDS" | "PRIVATE"
+  media: {
+    mediaType: "IMAGE" | "VIDEO"
+    mediaUrl: string
+    thumbnailUrl?: string
+    width?: number
+    height?: number
+    durationMs?: number
+  }
+  musicTrackId?: string
+  musicStartMs?: number
+  musicDurationMs?: number
+}
+
 export type FriendshipStatus = "PENDING" | "ACCEPTED"
 
 export interface FriendUser {
@@ -86,7 +162,7 @@ export interface Friendship {
 
 interface BackendNotification {
   id: string
-  type: "SYSTEM" | "POST" | "SECURITY"
+  type: "SYSTEM" | "POST" | "STORY" | "SECURITY"
   title: string
   message: string
   read: boolean
@@ -232,6 +308,7 @@ export const mapPost = (post: BackendPost): AppPost => ({
 
 const mapNotificationType = (type: BackendNotification["type"]): NotificationType => {
   if (type === "SECURITY") return "system_alert"
+  if (type === "STORY") return "social_like"
   if (type === "POST") return "social_comment"
   return "network_alert"
 }
@@ -413,6 +490,53 @@ export const friendApi = {
     return apiRequest<void>(`/api/friends/${friendshipId}`, {
       method: "DELETE",
     })
+  },
+}
+
+export const storyApi = {
+  async list(page = 0, size = 20) {
+    return apiRequest<PagedResponse<BackendStory>>(`/api/stories?page=${page}&size=${size}`)
+  },
+
+  async create(payload: StoryCreatePayload) {
+    return apiRequest<BackendStory>("/api/stories", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
+  },
+
+  async markViewed(id: string) {
+    return apiRequest<BackendStory>(`/api/stories/${id}/views`, {
+      method: "POST",
+    })
+  },
+
+  async react(id: string, reactionType: string) {
+    return apiRequest(`/api/stories/${id}/reactions`, {
+      method: "POST",
+      body: JSON.stringify({ reactionType }),
+    })
+  },
+
+  async deleteReaction(id: string) {
+    return apiRequest<void>(`/api/stories/${id}/reactions`, {
+      method: "DELETE",
+    })
+  },
+
+  async delete(id: string) {
+    return apiRequest<void>(`/api/stories/${id}`, {
+      method: "DELETE",
+    })
+  },
+}
+
+export const musicTrackApi = {
+  async list(query?: string) {
+    const params = new URLSearchParams()
+    if (query?.trim()) params.set("query", query.trim())
+    const suffix = params.toString() ? `?${params.toString()}` : ""
+    return apiRequest<BackendMusicTrack[]>(`/api/music-tracks${suffix}`)
   },
 }
 
