@@ -357,6 +357,16 @@ export const uploadApi = {
       body: formData,
     })
   },
+
+  async video(file: File) {
+    const formData = new FormData()
+    formData.append("file", file)
+
+    return apiRequest<UploadedImage>("/api/uploads/videos", {
+      method: "POST",
+      body: formData,
+    })
+  },
 }
 
 export const friendApi = {

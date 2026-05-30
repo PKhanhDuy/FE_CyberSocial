@@ -68,12 +68,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
 
   const handlePost = async () => {
     if (!content.trim() && !media) {
-      setSubmitError("Vui long nhap noi dung hoac chon anh.")
-      return
-    }
-
-    if (media?.type === "video") {
-      setSubmitError("Backend hien chi ho tro upload anh.")
+      setSubmitError("Vui long nhap noi dung hoac chon anh/video.")
       return
     }
 
@@ -83,7 +78,12 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
     // Keep the existing AI scanning UX unchanged; submit after the scan finishes.
     window.setTimeout(async () => {
       try {
-        const mediaUrls = media ? [(await uploadApi.image(media.file)).url] : []
+        const uploadedMedia = media
+          ? media.type === "video"
+            ? await uploadApi.video(media.file)
+            : await uploadApi.image(media.file)
+          : null
+        const mediaUrls = uploadedMedia ? [uploadedMedia.url] : []
         await postApi.create(content.trim(), "PUBLIC", mediaUrls)
         window.dispatchEvent(new CustomEvent("cybersocial:post-created"))
         setContent("")

@@ -14,6 +14,11 @@ interface PostCardProps {
   onViewAnalysis: (post: Post) => void
 }
 
+const isVideoMedia = (url: string) => {
+  const normalizedUrl = url.toLowerCase().split("?")[0]
+  return normalizedUrl.includes("/video/upload/") || /\.(mp4|webm|mov|m4v|ogg)$/.test(normalizedUrl)
+}
+
 export function PostCard({ post, onViewAnalysis }: PostCardProps) {
   const currentUser = useAuthStore((state) => state.user)
   const isSuspicious = post.aiState === "suspicious"
@@ -95,7 +100,11 @@ export function PostCard({ post, onViewAnalysis }: PostCardProps) {
 
         {post.media && (
           <div className="rounded-lg overflow-hidden border border-border mb-4 relative">
-            <img src={post.media} alt="Post media" className="w-full h-auto object-cover max-h-96" />
+            {isVideoMedia(post.media) ? (
+              <video src={post.media} controls className="w-full h-auto max-h-96 bg-black" />
+            ) : (
+              <img src={post.media} alt="Post media" className="w-full h-auto object-cover max-h-96" />
+            )}
             {isSuspicious && (
               <div className="absolute inset-0 bg-accent-pink/10 pointer-events-none flex items-center justify-center">
                 <div className="bg-panel/ backdrop-blur-md border border-accent-pink/50 text-accent-pink px-4 py-2 rounded-full font-bold text-sm tracking-wider uppercase flex items-center gap-2 shadow-[var(--shadow-neon-pink)]">
