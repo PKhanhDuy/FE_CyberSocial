@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 import { useAuthStore } from "@/store/useAuthStore"
 import { musicTrackApi, storyApi, uploadApi, type BackendMusicTrack, type BackendStory } from "@/lib/api"
 import type { User } from "@/mocks/types"
-
+import { useTranslation } from "react-i18next"
 type StoryMediaType = "image" | "video"
 
 interface MusicTrack {
@@ -26,11 +26,16 @@ interface Story {
   author: Pick<User, "id" | "username" | "avatar" | "isVerified">
   mediaUrl: string
   mediaType: StoryMediaType
+  mediaDurationMs?: number
   caption: string
   createdAt: string
   music?: MusicTrack
+  musicStartMs?: number
+  musicDurationMs?: number
   isOwn?: boolean
   isViewed?: boolean
+  isPublishing?: boolean
+  publishError?: boolean
   currentUserReaction?: string
   viewers?: StoryActivityUser[]
   reactions?: StoryReactionUser[]
@@ -114,18 +119,25 @@ const formatDuration = (seconds: number) => {
   return `${Math.floor(safeSeconds / 60)}:${String(safeSeconds % 60).padStart(2, "0")}`
 }
 
-const relativeStoryTime = (value: string) => {
+type Translate = ReturnType<typeof useTranslation>["t"]
+
+const relativeStoryTime = (value: string, t: Translate) => {
   const then = new Date(value).getTime()
+  if (!Number.isFinite(then)) return value
+
   const diffSeconds = Math.max(0, Math.floor((Date.now() - then) / 1000))
-  if (diffSeconds < 60) return "Vua xong"
+  if (diffSeconds < 60) return t("stories.time.justNow")
   const diffMinutes = Math.floor(diffSeconds / 60)
-  if (diffMinutes < 60) return `${diffMinutes} phut`
+  if (diffMinutes < 60) return t("stories.time.minute", { count: diffMinutes })
   const diffHours = Math.floor(diffMinutes / 60)
-  if (diffHours < 24) return `${diffHours} gio`
-  return `${Math.floor(diffHours / 24)} ngay`
+  if (diffHours < 24) return t("stories.time.hour", { count: diffHours })
+  return t("stories.time.day", { count: Math.floor(diffHours / 24) })
 }
 
 const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+
+const DEFAULT_IMAGE_STORY_DURATION_MS = 20_000
+const DEFAULT_MUSIC_PREVIEW_DURATION_MS = 20_000
 
 const mapMusicTrack = (track: BackendMusicTrack): MusicTrack => ({
   id: track.id,
@@ -137,7 +149,7 @@ const mapMusicTrack = (track: BackendMusicTrack): MusicTrack => ({
   isBackend: true,
 })
 
-const mapBackendStory = (story: BackendStory, currentUserId?: string): Story => ({
+const mapBackendStory = (story: BackendStory, currentUserId: string | undefined, t: Translate): Story => ({
   id: story.id,
   author: {
     id: story.author.id,
@@ -147,9 +159,12 @@ const mapBackendStory = (story: BackendStory, currentUserId?: string): Story => 
   },
   mediaUrl: story.media.mediaUrl,
   mediaType: story.media.mediaType === "VIDEO" ? "video" : "image",
+  mediaDurationMs: story.media.durationMs,
   caption: story.caption || "",
-  createdAt: relativeStoryTime(story.createdAt),
+  createdAt: relativeStoryTime(story.createdAt, t),
   music: story.music ? mapMusicTrack(story.music) : undefined,
+  musicStartMs: story.musicStartMs,
+  musicDurationMs: story.musicDurationMs,
   isOwn: currentUserId ? story.author.id === currentUserId : false,
   isViewed: story.viewedByCurrentUser,
   currentUserReaction: story.currentUserReaction,
@@ -157,13 +172,13 @@ const mapBackendStory = (story: BackendStory, currentUserId?: string): Story => 
     id: viewer.userId,
     username: viewer.displayName,
     avatar: viewer.avatarUrl || `https://i.pravatar.cc/150?u=${encodeURIComponent(viewer.userId)}`,
-    viewedAt: relativeStoryTime(viewer.viewedAt),
+    viewedAt: relativeStoryTime(viewer.viewedAt, t),
   })) ?? [],
   reactions: story.reactions?.map((reaction) => ({
     id: reaction.userId,
     username: reaction.displayName,
     avatar: reaction.avatarUrl || `https://i.pravatar.cc/150?u=${encodeURIComponent(reaction.userId)}`,
-    viewedAt: relativeStoryTime(reaction.createdAt),
+    viewedAt: relativeStoryTime(reaction.createdAt, t),
     reactionType: reaction.reactionType,
   })) ?? [],
 })
@@ -181,13 +196,17 @@ export function StoriesTray() {
   const [isMusicPickerOpen, setIsMusicPickerOpen] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [musicPlaybackError, setMusicPlaybackError] = useState<string | null>(null)
   const [floatingReactions, setFloatingReactions] = useState<Array<{ id: string; emoji: string }>>([])
   const [isReacting, setIsReacting] = useState(false)
   const [isViewerListOpen, setIsViewerListOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const storyVideoRef = useRef<HTMLVideoElement>(null)
+  const storyAudioRef = useRef<HTMLAudioElement>(null)
+  const composerAudioRef = useRef<HTMLAudioElement>(null)
+  const musicPreviewTimeoutRef = useRef<number | null>(null)
   const [storyVideoProgress, setStoryVideoProgress] = useState(0)
-
+  const { t } = useTranslation()
   const selectedStory = selectedStoryIndex === null ? null : stories[selectedStoryIndex]
   const selectedStoryViewerActivities: StoryViewerActivity[] = selectedStory
     ? (() => {
@@ -217,6 +236,9 @@ export function StoriesTray() {
   useEffect(() => {
     return () => {
       if (draftMedia?.url) URL.revokeObjectURL(draftMedia.url)
+      composerAudioRef.current?.pause()
+      storyAudioRef.current?.pause()
+      if (musicPreviewTimeoutRef.current !== null) window.clearTimeout(musicPreviewTimeoutRef.current)
     }
   }, [draftMedia?.url])
 
@@ -225,7 +247,7 @@ export function StoriesTray() {
 
     storyApi.list()
       .then((response) => {
-        if (isMounted) setStories(response.content.map((story) => mapBackendStory(story, currentUser?.id)))
+        if (isMounted) setStories(response.content.map((story) => mapBackendStory(story, currentUser?.id, t)))
       })
       .catch(() => {
         if (isMounted) setStories(fallbackStories)
@@ -234,7 +256,7 @@ export function StoriesTray() {
     return () => {
       isMounted = false
     }
-  }, [currentUser?.id])
+  }, [currentUser?.id, t])
 
   useEffect(() => {
     let isMounted = true
@@ -266,7 +288,7 @@ export function StoriesTray() {
     if (!selectedStory || selectedStory.mediaType === "video") return
 
     setStoryVideoProgress(0)
-    const durationMs = 5000
+    const durationMs = selectedStory.mediaDurationMs ?? selectedStory.musicDurationMs ?? DEFAULT_IMAGE_STORY_DURATION_MS
     const startedAt = Date.now()
     const intervalId = window.setInterval(() => {
       setStoryVideoProgress(Math.min(100, ((Date.now() - startedAt) / durationMs) * 100))
@@ -279,12 +301,78 @@ export function StoriesTray() {
       window.clearInterval(intervalId)
       window.clearTimeout(timeoutId)
     }
-  }, [selectedStory?.id, selectedStory?.mediaType])
+  }, [selectedStory?.id, selectedStory?.mediaType, selectedStory?.mediaDurationMs, selectedStory?.musicDurationMs])
+
+  useEffect(() => {
+    const audio = storyAudioRef.current
+    if (!audio) return
+
+    audio.pause()
+    audio.currentTime = 0
+    setMusicPlaybackError(null)
+
+    if (!selectedStory?.music?.audioUrl) return
+
+    audio.src = selectedStory.music.audioUrl
+    audio.currentTime = (selectedStory.musicStartMs ?? 0) / 1000
+    const durationMs = selectedStory.musicDurationMs ?? DEFAULT_IMAGE_STORY_DURATION_MS
+    const timeoutId = window.setTimeout(() => {
+      audio.pause()
+    }, durationMs)
+
+    audio.play().catch(() => {
+      setMusicPlaybackError(t("stories.musicError"))
+    })
+
+    return () => {
+      window.clearTimeout(timeoutId)
+      audio.pause()
+      audio.currentTime = 0
+    }
+  }, [selectedStory?.id, selectedStory?.music?.audioUrl, selectedStory?.musicStartMs, selectedStory?.musicDurationMs])
 
   const openFilePicker = (accept: string) => {
     if (!fileInputRef.current) return
     fileInputRef.current.accept = accept
     fileInputRef.current.click()
+  }
+
+  const stopComposerAudio = () => {
+    const audio = composerAudioRef.current
+    if (musicPreviewTimeoutRef.current !== null) {
+      window.clearTimeout(musicPreviewTimeoutRef.current)
+      musicPreviewTimeoutRef.current = null
+    }
+    if (!audio) return
+    audio.pause()
+    audio.currentTime = 0
+  }
+
+  const previewMusic = (track: MusicTrack) => {
+    setSelectedMusic(track)
+    setIsMusicPickerOpen(false)
+    setMusicPlaybackError(null)
+
+    const audio = composerAudioRef.current
+    if (!audio || !track.audioUrl) {
+      setMusicPlaybackError(t("stories.musicPlaybackError"))
+      return
+    }
+
+    audio.pause()
+    audio.src = track.audioUrl
+    audio.currentTime = 0
+    audio.play().catch(() => {
+      setMusicPlaybackError(t("stories.musicReviewError"))
+    })
+
+    if (musicPreviewTimeoutRef.current !== null) {
+      window.clearTimeout(musicPreviewTimeoutRef.current)
+    }
+    musicPreviewTimeoutRef.current = window.setTimeout(() => {
+      audio.pause()
+      musicPreviewTimeoutRef.current = null
+    }, DEFAULT_MUSIC_PREVIEW_DURATION_MS)
   }
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -300,7 +388,9 @@ export function StoriesTray() {
     })
     setSelectedMusic(null)
     setIsMusicPickerOpen(false)
+    stopComposerAudio()
     setSubmitError(null)
+    setMusicPlaybackError(null)
     setIsComposerOpen(true)
     event.target.value = ""
   }
@@ -311,7 +401,9 @@ export function StoriesTray() {
     setDraftCaption("")
     setSelectedMusic(null)
     setIsMusicPickerOpen(false)
+    stopComposerAudio()
     setSubmitError(null)
+    setMusicPlaybackError(null)
     setIsPublishing(false)
     setIsComposerOpen(false)
   }
@@ -319,30 +411,69 @@ export function StoriesTray() {
   const publishStory = async () => {
     if (!draftMedia) return
 
+    const mediaToPublish = draftMedia
+    const captionToPublish = draftCaption.trim()
+    const musicToPublish = selectedMusic
+    const optimisticStoryId = `publishing-${Date.now()}`
+    const optimisticMediaUrl = URL.createObjectURL(mediaToPublish.file)
+    const optimisticStory: Story = {
+      id: optimisticStoryId,
+      author: storyOwner,
+      mediaUrl: optimisticMediaUrl,
+      mediaType: mediaToPublish.type,
+      mediaDurationMs: mediaToPublish.type === "image" ? DEFAULT_IMAGE_STORY_DURATION_MS : undefined,
+      caption: captionToPublish,
+      createdAt: t("stories.uploading"),
+      music: mediaToPublish.type === "image" ? musicToPublish ?? undefined : undefined,
+      musicStartMs: mediaToPublish.type === "image" && musicToPublish ? 0 : undefined,
+      musicDurationMs: mediaToPublish.type === "image" && musicToPublish ? DEFAULT_IMAGE_STORY_DURATION_MS : undefined,
+      isOwn: true,
+      isPublishing: true,
+    }
+
     setIsPublishing(true)
     setSubmitError(null)
+    setMusicPlaybackError(null)
+    setStories((currentStories) => [optimisticStory, ...currentStories])
+    setDraftMedia(null)
+    setDraftCaption("")
+    setSelectedMusic(null)
+    setIsMusicPickerOpen(false)
+    stopComposerAudio()
+    setIsComposerOpen(false)
+
     try {
-      const uploaded = draftMedia.type === "video"
-        ? await uploadApi.video(draftMedia.file)
-        : await uploadApi.image(draftMedia.file)
+      const uploaded = mediaToPublish.type === "video"
+        ? await uploadApi.video(mediaToPublish.file)
+        : await uploadApi.image(mediaToPublish.file)
       const createdStory = await storyApi.create({
-        caption: draftCaption.trim() || undefined,
+        caption: captionToPublish || undefined,
         visibility: "FRIENDS",
         media: {
-          mediaType: draftMedia.type === "video" ? "VIDEO" : "IMAGE",
+          mediaType: mediaToPublish.type === "video" ? "VIDEO" : "IMAGE",
           mediaUrl: uploaded.url,
+          durationMs: mediaToPublish.type === "image" ? DEFAULT_IMAGE_STORY_DURATION_MS : undefined,
         },
-        musicTrackId: draftMedia.type === "image" && selectedMusic?.isBackend ? selectedMusic.id : undefined,
+        musicTrackId: mediaToPublish.type === "image" && musicToPublish?.isBackend ? musicToPublish.id : undefined,
+        musicStartMs: mediaToPublish.type === "image" && musicToPublish?.isBackend ? 0 : undefined,
+        musicDurationMs: mediaToPublish.type === "image" && musicToPublish?.isBackend ? DEFAULT_IMAGE_STORY_DURATION_MS : undefined,
       })
 
-      setStories((currentStories) => [mapBackendStory(createdStory, currentUser?.id), ...currentStories])
-      setDraftMedia(null)
-      setDraftCaption("")
-      setSelectedMusic(null)
-      setIsMusicPickerOpen(false)
-      setIsComposerOpen(false)
+      setStories((currentStories) => currentStories.map((story) => (
+        story.id === optimisticStoryId ? mapBackendStory(createdStory, currentUser?.id, t) : story
+      )))
+      URL.revokeObjectURL(optimisticMediaUrl)
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Khong tao duoc story")
+      setSubmitError(error instanceof Error ? error.message : t("stories.createError"))
+      setStories((currentStories) => currentStories.map((story) => (
+        story.id === optimisticStoryId
+          ? { ...story, isPublishing: false, publishError: true, createdAt: t("stories.uploadError") }
+          : story
+      )))
+      window.setTimeout(() => {
+        setStories((currentStories) => currentStories.filter((story) => story.id !== optimisticStoryId))
+        URL.revokeObjectURL(optimisticMediaUrl)
+      }, 4500)
     } finally {
       setIsPublishing(false)
     }
@@ -356,7 +487,7 @@ export function StoriesTray() {
     storyApi.markViewed(story.id)
       .then((updatedStory) => {
         setStories((currentStories) => currentStories.map((currentStory) => (
-          currentStory.id === updatedStory.id ? mapBackendStory(updatedStory, currentUser?.id) : currentStory
+          currentStory.id === updatedStory.id ? mapBackendStory(updatedStory, currentUser?.id, t) : currentStory
         )))
       })
       .catch(() => {
@@ -430,7 +561,7 @@ export function StoriesTray() {
         <button
           type="button"
           onClick={() => setIsComposerOpen(true)}
-          className="snap-start shrink-0 w-32 sm:w-36 h-52 rounded-lg overflow-hidden border border-border bg-panel relative group text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue"
+          className="snap-start shrink-0 w-32 sm:w-33 h-52 rounded-lg overflow-hidden border border-border bg-panel relative group text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue"
         >
           <div className="h-45 bg-panel-hover overflow-hidden -mt-16">
             <img src={storyOwner.avatar} alt="" className="h-full w-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-300" />
@@ -441,7 +572,7 @@ export function StoriesTray() {
             </div>
           </div>
           <div className="absolute inset-x-0 bottom-0 p-3 pt-8 bg-panel text-center">
-            <div className="text-sm font-bold text-foreground line-clamp-2">Tao tin</div>
+            <div className="text-sm font-bold text-foreground line-clamp-2">{t("stories.create")}</div>
           </div>
         </button>
 
@@ -449,8 +580,13 @@ export function StoriesTray() {
           <button
             key={story.id}
             type="button"
+            disabled={story.isPublishing || story.publishError}
             onClick={() => selectStory(index)}
-            className="snap-start shrink-0 w-32 sm:w-36 h-52 rounded-lg overflow-hidden border border-border bg-panel relative text-left group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue"
+            className={cn(
+              "snap-start shrink-0 w-32 sm:w-33 h-52 rounded-lg overflow-hidden border border-border bg-panel relative text-left group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue",
+              story.isPublishing && "cursor-wait",
+              story.publishError && "cursor-not-allowed border-danger/50"
+            )}
           >
             {story.mediaType === "video" ? (
               <video src={story.mediaUrl} muted playsInline className="absolute inset-0 h-full w-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -458,6 +594,23 @@ export function StoriesTray() {
               <img src={story.mediaUrl} alt="" className="absolute inset-0 h-full w-full object-cover group-hover:scale-105 transition-transform duration-300" />
             )}
             <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-black/10 to-black/80" />
+            {(story.isPublishing || story.publishError) && (
+              <div className="absolute inset-0 z-10 bg-black/55 backdrop-blur-[1px] flex flex-col items-center justify-center gap-3 text-white">
+                {story.isPublishing ? (
+                  <>
+                    <div className="h-11 w-11 rounded-full border-2 border-white/30 border-t-accent-blue animate-spin" />
+                    <div className="text-xs font-bold tracking-wider">{t("stories.uploading")}</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="h-11 w-11 rounded-full border border-danger/60 bg-danger/20 flex items-center justify-center">
+                      <X className="h-5 w-5 text-danger" />
+                    </div>
+                    <div className="text-xs font-bold tracking-wider text-danger">{t("stories.uploadError")}</div>
+                  </>
+                )}
+              </div>
+            )}
             <div className="absolute top-3 left-3">
               <div className={cn("rounded-full p-0.5", story.isViewed ? "bg-border" : "bg-gradient-to-br from-accent-blue to-accent-pink")}>
                 <Avatar src={story.author.avatar} fallback={story.author.username[0]} className="h-9 w-9 border-2 border-background" />
@@ -481,8 +634,26 @@ export function StoriesTray() {
         ))}
       </div>
 
+      {submitError && !isComposerOpen && (
+        <div className="mt-3 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-foreground">
+          {submitError}
+        </div>
+      )}
+
       {typeof document !== "undefined" && createPortal(
         <>
+          <audio
+            ref={composerAudioRef}
+            preload="metadata"
+            className="hidden"
+            onError={() => setMusicPlaybackError(t("stories.musicReviewError"))}
+          />
+          <audio
+            ref={storyAudioRef}
+            preload="metadata"
+            className="hidden"
+            onError={() => setMusicPlaybackError(t("stories.musicReviewError"))}
+          />
           <AnimatePresence>
             {isComposerOpen && (
               <motion.div
@@ -525,7 +696,7 @@ export function StoriesTray() {
                               <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2 text-sm font-bold">
                                   <Music2 className="w-4 h-4 text-accent-pink" />
-                                  Chon nhac
+                                  {t("stories.selectMusic")}
                                 </div>
                                 <button
                                   type="button"
@@ -539,17 +710,14 @@ export function StoriesTray() {
                               <div className="space-y-2">
                                 {musicTracks.length === 0 && (
                                   <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-center text-sm text-white/60">
-                                    Chua co bai nhac nao.
+                                    {t("stories.noMusic")}
                                   </div>
                                 )}
                                 {musicTracks.map((track) => (
                                   <button
                                     key={track.id}
                                     type="button"
-                                    onClick={() => {
-                                      setSelectedMusic(track)
-                                      setIsMusicPickerOpen(false)
-                                    }}
+                                    onClick={() => previewMusic(track)}
                                     className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left hover:border-accent-pink/50 hover:bg-accent-pink/10 transition-colors flex items-center gap-3"
                                   >
                                     <div className="h-8 w-8 rounded-full bg-accent-pink/20 text-accent-pink flex items-center justify-center shrink-0">
@@ -572,8 +740,8 @@ export function StoriesTray() {
                         <div className="mx-auto mb-5 h-16 w-16 rounded-full border border-white/20 bg-white/10 text-white/70 flex items-center justify-center">
                           <Camera className="w-8 h-8" />
                         </div>
-                        <div className="text-white font-bold text-lg">Tao story moi</div>
-                        <div className="text-white/60 text-sm mt-2">Chon anh hoac video de xem truoc khi dang.</div>
+                        <div className="text-white font-bold text-lg">{t("stories.createNew")}</div>
+                        <div className="text-white/60 text-sm mt-2">{t("stories.description")}</div>
                         <div className="mt-6 mx-auto max-w-56 space-y-3">
                           <button
                             type="button"
@@ -581,7 +749,7 @@ export function StoriesTray() {
                             className="h-12 w-full rounded-lg border border-accent-blue/40 bg-accent-blue/15 text-accent-blue hover:bg-accent-blue/25 transition-colors flex items-center justify-center gap-2 font-bold"
                           >
                             <ImagePlus className="w-5 h-5" />
-                            Anh
+                            {t("stories.image")}
                           </button>
                           <button
                             type="button"
@@ -602,7 +770,7 @@ export function StoriesTray() {
                         <Avatar src={storyOwner.avatar} fallback={storyOwner.username[0]} />
                         <div>
                           <div className="font-bold text-foreground">{storyOwner.username}</div>
-                          <div className="text-xs text-muted font-mono">Tin cua ban</div>
+                          <div className="text-xs text-muted font-mono">{t("stories.yourStory")}</div>
                         </div>
                       </div>
                       <button
@@ -618,7 +786,7 @@ export function StoriesTray() {
                     <textarea
                       value={draftCaption}
                       onChange={(event) => setDraftCaption(event.target.value)}
-                      placeholder="Them mo ta cho story..."
+                      placeholder={t("stories.descriptionPlaceholder")}
                       className="min-h-20 resize-none rounded-lg border border-border bg-panel px-3 py-3 text-sm text-foreground outline-none focus:border-accent-blue"
                     />
 
@@ -629,7 +797,7 @@ export function StoriesTray() {
                         className="h-10 w-full rounded-lg border border-border text-accent-blue hover:border-accent-blue/50 hover:bg-accent-blue/10 transition-colors flex items-center justify-center gap-2 text-sm font-bold"
                       >
                         <ImagePlus className="w-4 h-4" />
-                        Chon anh
+                        {t("stories.selectImage")}
                       </button>
                       <button
                         type="button"
@@ -637,7 +805,7 @@ export function StoriesTray() {
                         className="h-10 w-full rounded-lg border border-border text-accent-pink hover:border-accent-pink/50 hover:bg-accent-pink/10 transition-colors flex items-center justify-center gap-2 text-sm font-bold"
                       >
                         <Video className="w-4 h-4" />
-                        Chon video
+                        {t("stories.selectVideo")}
                       </button>
                     </div>
 
@@ -649,7 +817,7 @@ export function StoriesTray() {
                           className="h-10 w-full rounded-lg border border-border text-accent-pink hover:border-accent-pink/50 hover:bg-accent-pink/10 transition-colors flex items-center justify-center gap-2 text-sm font-bold"
                         >
                           <Music2 className="w-4 h-4 text-accent-pink" />
-                          {selectedMusic ? "Doi nhac" : "Chon nhac"}
+                          {selectedMusic ? t("stories.changeMusic") : t("stories.selectMusic")}
                         </button>
                         {selectedMusic && (
                           <div className="mt-2 rounded-lg border border-accent-pink/30 bg-accent-pink/10 p-2 flex items-center gap-2">
@@ -662,12 +830,21 @@ export function StoriesTray() {
                             </div>
                             <button
                               type="button"
-                              onClick={() => setSelectedMusic(null)}
-                              aria-label="Bo nhac"
+                              onClick={() => {
+                                setSelectedMusic(null)
+                                setMusicPlaybackError(null)
+                                stopComposerAudio()
+                              }}
+                              aria-label={t("stories.removeMusic")}
                               className="h-7 w-7 rounded-full text-muted hover:bg-panel-hover hover:text-foreground transition-colors flex items-center justify-center"
                             >
                               <X className="w-4 h-4" />
                             </button>
+                          </div>
+                        )}
+                        {musicPlaybackError && (
+                          <div className="mt-2 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-foreground">
+                            {musicPlaybackError}
                           </div>
                         )}
                       </div>
@@ -675,7 +852,7 @@ export function StoriesTray() {
 
                     {draftMedia?.type === "video" && (
                       <div className="pt-4 text-xs text-muted">
-                        Chen nhac chi ap dung cho story hinh anh.
+                        {t("stories.videoMusicNote")}
                       </div>
                     )}
 
@@ -687,10 +864,10 @@ export function StoriesTray() {
 
                     <div className="mt-auto flex gap-3 pt-4">
                       <Button type="button" variant="outline" className="flex-1" onClick={closeComposer} disabled={isPublishing}>
-                        Huy
+                        {t("stories.cancel")}
                       </Button>
                       <Button type="button" variant="neon-blue" className="flex-1 gap-2" onClick={publishStory} disabled={!draftMedia || isPublishing}>
-                        {isPublishing ? "Dang..." : "Dang"} <Send className="w-4 h-4" />
+                        {isPublishing ? t("storis.enter")+"..." : t("stories.enter")} <Send className="w-4 h-4" />
                       </Button>
                     </div>
                   </div>
@@ -710,7 +887,7 @@ export function StoriesTray() {
                 <button
                   type="button"
                   onClick={() => setSelectedStoryIndex(null)}
-                  aria-label="Thoat xem story"
+                  aria-label="Exit story"
                   className="fixed top-5 right-5 lg:right-[21rem] z-[10000] h-11 rounded-full border border-white/30 bg-black/80 px-4 text-sm font-bold text-white shadow-lg backdrop-blur hover:bg-white/20 transition-colors flex items-center gap-2"
                 >
                   <X className="w-5 h-5" />
@@ -718,7 +895,7 @@ export function StoriesTray() {
                 <button
                   type="button"
                   onClick={showPreviousStory}
-                  aria-label="Story truoc"
+                  aria-label="Story previous"
                   className="fixed left-4 sm:left-[calc(50%-270px)] top-1/2 z-[10000] h-12 w-12 -translate-y-1/2 rounded-full border border-white/30 bg-black/80 text-white shadow-lg backdrop-blur hover:bg-white/20 transition-colors flex items-center justify-center"
                 >
                   <ChevronLeft className="w-6 h-6" />
@@ -762,6 +939,7 @@ export function StoriesTray() {
                   </div>
                   {(selectedStory.caption || selectedStory.music) && (
                     <div className="absolute inset-x-0 bottom-0 p-5 bg-gradient-to-t from-black/85 to-transparent">
+                      {selectedStory.caption && <p className="text-white text-sm leading-relaxed">{selectedStory.caption}</p>}
                       {selectedStory.music && (
                         <div className="mb-3 inline-flex max-w-full items-center gap-2 rounded-full border border-white/20 bg-black/55 px-3 py-2 text-white backdrop-blur">
                           <Music2 className="w-4 h-4 text-accent-pink shrink-0" />
@@ -769,7 +947,11 @@ export function StoriesTray() {
                           <span className="text-xs text-white/60 truncate">- {selectedStory.music.artist}</span>
                         </div>
                       )}
-                      {selectedStory.caption && <p className="text-white text-sm leading-relaxed">{selectedStory.caption}</p>}
+                      {musicPlaybackError && selectedStory.music && (
+                        <div className="mb-3 rounded-lg border border-white/20 bg-black/70 px-3 py-2 text-xs text-white/80 backdrop-blur">
+                          {musicPlaybackError}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -784,7 +966,7 @@ export function StoriesTray() {
                       >
                         <ChevronUp className={cn("mb-0.5 h-4 w-4 transition-transform", isViewerListOpen && "rotate-180")} />
                         <span className="block border-b border-white/80 pb-0.5 text-sm font-extrabold leading-none">
-                          {selectedStoryViewerActivities.length} nguoi xem
+                          {selectedStoryViewerActivities.length} {t("stories.viewer")}
                         </span>
                       </button>
 
@@ -797,7 +979,7 @@ export function StoriesTray() {
                             className="absolute inset-x-3 bottom-12 z-30 rounded-lg border border-white/15 bg-black/85 p-3 text-white shadow-2xl backdrop-blur"
                           >
                             <div className="mb-2 flex items-center justify-between border-b border-white/10 pb-2">
-                              <div className="text-sm font-bold">{selectedStoryViewerActivities.length} nguoi xem</div>
+                              <div className="text-sm font-bold">{selectedStoryViewerActivities.length} {t("stories.viewer")}</div>
                               <button
                                 type="button"
                                 onClick={() => setIsViewerListOpen(false)}
@@ -810,7 +992,7 @@ export function StoriesTray() {
                             <div className="max-h-[36vh] space-y-2 overflow-y-auto pr-1">
                               {selectedStoryViewerActivities.length === 0 && (
                                 <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-sm text-white/55">
-                                  Chua co ai xem story nay.
+                                  {t("stories.noViewer")}
                                 </div>
                               )}
                               {selectedStoryViewerActivities.map((viewer) => (
@@ -875,7 +1057,7 @@ export function StoriesTray() {
                 <button
                   type="button"
                   onClick={showNextStory}
-                  aria-label="Story tiep theo"
+                  aria-label="Story next"
                   className="fixed right-4 sm:right-[calc(50%-270px)] top-1/2 z-[10000] h-12 w-12 -translate-y-1/2 rounded-full border border-white/30 bg-black/80 text-white shadow-lg backdrop-blur hover:bg-white/20 transition-colors flex items-center justify-center"
                 >
                   <ChevronRight className="w-6 h-6" />

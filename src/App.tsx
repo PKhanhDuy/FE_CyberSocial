@@ -4,6 +4,7 @@ import { MainLayout } from "./components/layout/MainLayout"
 import { Home } from "./pages/Home"
 import { Explore } from "./pages/Explore"
 import { Profile } from "./pages/Profile"
+import { PublicProfile } from "./pages/PublicProfile"
 import { Notifications } from "./pages/Notifications"
 import { VerifiedNews } from "./pages/VerifiedNews"
 import { Friends } from "./pages/Friends"
@@ -61,6 +62,7 @@ function App() {
             <Route path="friends" element={<Friends />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="profile" element={<Profile />} />
+            <Route path="users/:userId" element={<PublicProfile />} />
             <Route path="change-password" element={<ChangePassword />} />
           </Route>
         </Route>

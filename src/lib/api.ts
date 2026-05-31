@@ -366,6 +366,10 @@ export const userApi = {
     return user
   },
 
+  async get(id: string) {
+    return mapUser(await apiRequest<BackendUser>(`/api/users/${id}`))
+  },
+
   async updateMe(displayName: string) {
     const user = mapUser(await apiRequest<BackendUser>("/api/users/me", {
       method: "PUT",
@@ -406,6 +410,19 @@ export const postApi = {
   async search(query: string, page = 0, size = 100) {
     const params = new URLSearchParams({
       query,
+      page: String(page),
+      size: String(size),
+    })
+    const response = await apiRequest<PagedResponse<BackendPost>>(`/api/posts?${params.toString()}`)
+    return {
+      ...response,
+      content: response.content.map(mapPost),
+    }
+  },
+
+  async byAuthor(authorId: string, page = 0, size = 100) {
+    const params = new URLSearchParams({
+      authorId,
       page: String(page),
       size: String(size),
     })

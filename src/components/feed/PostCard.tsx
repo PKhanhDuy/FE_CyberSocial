@@ -1,4 +1,5 @@
 import type { Post } from "@/mocks/types"
+import { Link } from "react-router-dom"
 import { Avatar } from "@/components/ui/Avatar"
 import { Badge } from "@/components/ui/Badge"
 import { Progress } from "@/components/ui/Progress"
@@ -25,6 +26,7 @@ export function PostCard({ post, onViewAnalysis }: PostCardProps) {
   const isVerified = post.aiState === "verified"
   const isMonitoring = post.aiState === "monitoring"
   const authorAvatar = currentUser?.id === post.author.id ? currentUser.avatar : post.author.avatar
+  const authorProfilePath = currentUser?.id === post.author.id ? "/profile" : `/users/${post.author.id}`
   const { t } = useTranslation()
 
   return (
@@ -65,7 +67,7 @@ export function PostCard({ post, onViewAnalysis }: PostCardProps) {
       <div className="p-5">
         <div className="flex justify-between items-start mb-4">
           <div className="flex items-center gap-3">
-            <div className="relative">
+            <Link to={authorProfilePath} className="relative shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-accent-blue">
               <Avatar src={authorAvatar} fallback={post.author.username[0]} />
               {post.author.isOnline && (
                 <span className="absolute bottom-0 right-0 block h-3 w-3">
@@ -73,10 +75,12 @@ export function PostCard({ post, onViewAnalysis }: PostCardProps) {
                   <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500 border-2 border-[#0d0d1a]" />
                 </span>
               )}
-            </div>
+            </Link>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-foreground">{post.author.username}</span>
+                <Link to={authorProfilePath} className="font-bold text-foreground hover:text-accent-blue transition-colors">
+                  {post.author.username}
+                </Link>
                 {post.author.isVerified && <Badge variant="verified">✓</Badge>}
               </div>
               <div className="text-muted text-sm flex items-center gap-2">

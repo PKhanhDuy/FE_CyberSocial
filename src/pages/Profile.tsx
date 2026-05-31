@@ -98,8 +98,12 @@ export function Profile() {
     const loadUserPosts = async () => {
       setPostsError(null)
       try {
-        const response = await postApi.list()
-        setUserPosts(response.content.filter((post) => post.author.id === currentUser?.id))
+        if (!currentUser?.id) {
+          setUserPosts([])
+          return
+        }
+        const response = await postApi.byAuthor(currentUser.id)
+        setUserPosts(response.content)
       } catch (error) {
         setPostsError(error instanceof Error ? error.message : "Khong tai duoc bai viet")
       }
