@@ -657,7 +657,7 @@ export function StoriesTray() {
           <AnimatePresence>
             {isComposerOpen && (
               <motion.div
-                className="fixed inset-0 z-[10000] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+                className="fixed inset-0 z-[10000] bg-black/70 backdrop-blur-sm flex items-start md:items-center justify-center overflow-y-auto p-3 sm:p-4"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -666,9 +666,9 @@ export function StoriesTray() {
                   initial={{ opacity: 0, y: 18, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 18, scale: 0.98 }}
-                  className="w-full max-w-[680px] max-h-[92vh] overflow-hidden rounded-lg border border-border bg-background shadow-2xl grid md:grid-cols-[minmax(0,440px)_220px]"
+                  className="my-3 sm:my-4 w-full max-w-[680px] max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-2rem)] overflow-y-auto md:overflow-hidden rounded-lg border border-border bg-background shadow-2xl grid md:grid-cols-[minmax(0,440px)_220px]"
                 >
-                  <div className="relative bg-black min-h-[380px] flex items-center justify-center">
+                  <div className="relative bg-black min-h-[320px] sm:min-h-[380px] flex items-center justify-center">
                     {draftMedia?.type === "video" ? (
                       <video src={draftMedia.url} controls className="max-h-[72vh] w-full object-contain" />
                     ) : draftMedia ? (
@@ -691,7 +691,7 @@ export function StoriesTray() {
                               initial={{ opacity: 0, x: 16 }}
                               animate={{ opacity: 1, x: 0 }}
                               exit={{ opacity: 0, x: 16 }}
-                              className="absolute right-4 top-4 w-72 rounded-lg border border-white/15 bg-black/80 p-3 text-white shadow-2xl backdrop-blur"
+                              className="absolute right-3 top-3 flex max-h-[calc(100%-1.5rem)] w-[min(18rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-lg border border-white/15 bg-black/80 p-3 text-white shadow-2xl backdrop-blur sm:right-4 sm:top-4 sm:max-h-[calc(100%-2rem)] sm:w-72"
                             >
                               <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2 text-sm font-bold">
@@ -707,7 +707,7 @@ export function StoriesTray() {
                                   <X className="w-4 h-4" />
                                 </button>
                               </div>
-                              <div className="space-y-2">
+                              <div className="min-h-0 space-y-2 overflow-y-auto pr-1">
                                 {musicTracks.length === 0 && (
                                   <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-center text-sm text-white/60">
                                     {t("stories.noMusic")}
@@ -764,7 +764,7 @@ export function StoriesTray() {
                     )}
                   </div>
 
-                  <div className="p-4 flex flex-col min-h-[360px]">
+                  <div className="min-h-[360px] p-4 flex flex-col md:max-h-[92vh] md:overflow-y-auto">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
                         <Avatar src={storyOwner.avatar} fallback={storyOwner.username[0]} />
@@ -867,7 +867,7 @@ export function StoriesTray() {
                         {t("stories.cancel")}
                       </Button>
                       <Button type="button" variant="neon-blue" className="flex-1 gap-2" onClick={publishStory} disabled={!draftMedia || isPublishing}>
-                        {isPublishing ? t("storis.enter")+"..." : t("stories.enter")} <Send className="w-4 h-4" />
+                        {isPublishing ? `${t("stories.enter")}...` : t("stories.enter")} <Send className="w-4 h-4" />
                       </Button>
                     </div>
                   </div>

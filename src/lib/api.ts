@@ -50,8 +50,33 @@ export interface BackendPost {
   content: string
   visibility: "PUBLIC" | "PRIVATE"
   mediaUrls: string[]
+  likeCount: number
+  commentCount: number
+  shareCount: number
+  likedByCurrentUser: boolean
   createdAt: string
   updatedAt: string
+}
+
+export interface BackendPostComment {
+  id: string
+  postId: string
+  userId: string
+  authorDisplayName: string
+  authorAvatarUrl?: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface BackendPostShare {
+  id: string
+  postId: string
+  userId: string
+  authorDisplayName: string
+  authorAvatarUrl?: string
+  content?: string
+  createdAt: string
 }
 
 export interface UploadedImage {
@@ -179,6 +204,7 @@ export interface AppPost {
   likes: number
   comments: number
   shares: number
+  isLiked?: boolean
   aiState: "monitoring" | "suspicious" | "verified"
 }
 
@@ -300,10 +326,23 @@ export const mapPost = (post: BackendPost): AppPost => ({
   content: post.content,
   media: post.mediaUrls?.[0],
   timestamp: relativeTime(post.createdAt),
-  likes: 0,
-  comments: 0,
-  shares: 0,
+  likes: post.likeCount ?? 0,
+  comments: post.commentCount ?? 0,
+  shares: post.shareCount ?? 0,
+  isLiked: post.likedByCurrentUser ?? false,
   aiState: "monitoring",
+})
+
+export const mapPostComment = (comment: BackendPostComment) => ({
+  id: comment.id,
+  postId: comment.postId,
+  author: {
+    id: comment.userId,
+    username: comment.authorDisplayName,
+    avatar: comment.authorAvatarUrl || `https://i.pravatar.cc/150?u=${encodeURIComponent(comment.userId)}`,
+  },
+  content: comment.content,
+  timestamp: relativeTime(comment.createdAt),
 })
 
 const mapNotificationType = (type: BackendNotification["type"]): NotificationType => {
@@ -438,6 +477,36 @@ export const postApi = {
       method: "POST",
       body: JSON.stringify({ content, visibility, mediaUrls }),
     }))
+  },
+
+  async like(postId: string) {
+    return mapPost(await apiRequest<BackendPost>(`/api/posts/${postId}/likes`, {
+      method: "POST",
+    }))
+  },
+
+  async unlike(postId: string) {
+    return mapPost(await apiRequest<BackendPost>(`/api/posts/${postId}/likes`, {
+      method: "DELETE",
+    }))
+  },
+
+  async comments(postId: string) {
+    return (await apiRequest<BackendPostComment[]>(`/api/posts/${postId}/comments`)).map(mapPostComment)
+  },
+
+  async comment(postId: string, content: string) {
+    return mapPostComment(await apiRequest<BackendPostComment>(`/api/posts/${postId}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    }))
+  },
+
+  async share(postId: string, content: string) {
+    return apiRequest<BackendPostShare>(`/api/posts/${postId}/shares`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    })
   },
 }
 

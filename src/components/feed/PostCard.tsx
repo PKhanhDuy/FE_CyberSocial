@@ -1,18 +1,33 @@
+import { useState, type FormEvent } from "react"
 import type { Post } from "@/mocks/types"
 import { Link } from "react-router-dom"
+import { createPortal } from "react-dom"
 import { Avatar } from "@/components/ui/Avatar"
 import { Badge } from "@/components/ui/Badge"
 import { Progress } from "@/components/ui/Progress"
 import { Button } from "@/components/ui/Button"
-import { Heart, MessageSquare, Repeat2, Share, ShieldAlert, ShieldCheck, Activity } from "lucide-react"
-import { motion } from "framer-motion"
+import { Activity, Heart, MessageSquare, Repeat2, Send, Share, ShieldAlert, ShieldCheck, X } from "lucide-react"
+import { AnimatePresence, motion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { postApi } from "@/lib/api"
 import { useAuthStore } from "@/store/useAuthStore"
-import {useTranslation} from "react-i18next"
+import { useTranslation } from "react-i18next"
 
 interface PostCardProps {
   post: Post
   onViewAnalysis: (post: Post) => void
+  onRepostCreated?: (post: Post) => void
+}
+
+interface LocalComment {
+  id: string
+  author: {
+    id: string
+    username: string
+    avatar: string
+  }
+  content: string
+  timestamp: string
 }
 
 const isVideoMedia = (url: string) => {
@@ -20,14 +35,148 @@ const isVideoMedia = (url: string) => {
   return normalizedUrl.includes("/video/upload/") || /\.(mp4|webm|mov|m4v|ogg)$/.test(normalizedUrl)
 }
 
-export function PostCard({ post, onViewAnalysis }: PostCardProps) {
+function SharedPostPreview({ post }: { post: Post }) {
+  return (
+    <div className="mb-4 rounded-lg border border-border bg-panel/60 overflow-hidden">
+      <div className="p-4">
+        <div className="mb-3 flex items-center gap-3">
+          <Avatar src={post.author.avatar} fallback={post.author.username[0]} className="h-9 w-9" />
+          <div className="min-w-0">
+            <div className="truncate text-sm font-bold text-foreground">{post.author.username}</div>
+            <div className="text-xs text-muted">{post.timestamp}</div>
+          </div>
+        </div>
+        {post.content && <p className="text-sm text-foreground whitespace-pre-wrap">{post.content}</p>}
+      </div>
+      {post.media && (
+        <div className="border-t border-border bg-background">
+          {isVideoMedia(post.media) ? (
+            <video src={post.media} controls className="w-full h-auto max-h-80 bg-black" />
+          ) : (
+            <img src={post.media} alt="" className="w-full h-auto max-h-80 object-cover" />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProps) {
   const currentUser = useAuthStore((state) => state.user)
+  const [isLiked, setIsLiked] = useState(Boolean(post.isLiked))
+  const [likeCount, setLikeCount] = useState(post.likes)
+  const [commentCount, setCommentCount] = useState(post.comments)
+  const [shareCount, setShareCount] = useState(post.shares)
+  const [isSavingLike, setIsSavingLike] = useState(false)
+  const [isCommentsOpen, setIsCommentsOpen] = useState(false)
+  const [hasLoadedComments, setHasLoadedComments] = useState(false)
+  const [isLoadingComments, setIsLoadingComments] = useState(false)
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false)
+  const [commentDraft, setCommentDraft] = useState("")
+  const [localComments, setLocalComments] = useState<LocalComment[]>([])
+  const [isRepostOpen, setIsRepostOpen] = useState(false)
+  const [isSharing, setIsSharing] = useState(false)
+  const [repostText, setRepostText] = useState("")
+  const [actionError, setActionError] = useState<string | null>(null)
   const isSuspicious = post.aiState === "suspicious"
   const isVerified = post.aiState === "verified"
   const isMonitoring = post.aiState === "monitoring"
   const authorAvatar = currentUser?.id === post.author.id ? currentUser.avatar : post.author.avatar
   const authorProfilePath = currentUser?.id === post.author.id ? "/profile" : `/users/${post.author.id}`
   const { t } = useTranslation()
+  const canInteract = Boolean(currentUser)
+
+  const toggleLike = async () => {
+    if (isSavingLike) return
+
+    const nextLiked = !isLiked
+    const previousLiked = isLiked
+    const previousLikeCount = likeCount
+    setActionError(null)
+    setIsSavingLike(true)
+    setIsLiked(nextLiked)
+    setLikeCount((count) => Math.max(0, count + (nextLiked ? 1 : -1)))
+
+    try {
+      const updatedPost = nextLiked ? await postApi.like(post.id) : await postApi.unlike(post.id)
+      setIsLiked(Boolean(updatedPost.isLiked))
+      setLikeCount(updatedPost.likes)
+      setCommentCount(updatedPost.comments)
+      setShareCount(updatedPost.shares)
+    } catch (error) {
+      setIsLiked(previousLiked)
+      setLikeCount(previousLikeCount)
+      setActionError(error instanceof Error ? error.message : t("post.actions.actionError"))
+    } finally {
+      setIsSavingLike(false)
+    }
+  }
+
+  const toggleComments = async () => {
+    const nextOpen = !isCommentsOpen
+    setIsCommentsOpen(nextOpen)
+    if (!nextOpen || hasLoadedComments || isLoadingComments) return
+
+    setIsLoadingComments(true)
+    setActionError(null)
+    try {
+      setLocalComments(await postApi.comments(post.id))
+      setHasLoadedComments(true)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : t("post.actions.actionError"))
+    } finally {
+      setIsLoadingComments(false)
+    }
+  }
+
+  const submitComment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const text = commentDraft.trim()
+    if (!text || isSubmittingComment) return
+
+    setIsSubmittingComment(true)
+    setActionError(null)
+    try {
+      const comment = await postApi.comment(post.id, text)
+      setLocalComments((comments) => [...comments, comment])
+      setCommentCount((count) => count + 1)
+      setCommentDraft("")
+      setIsCommentsOpen(true)
+      setHasLoadedComments(true)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : t("post.actions.actionError"))
+    } finally {
+      setIsSubmittingComment(false)
+    }
+  }
+
+  const submitRepost = async () => {
+    if (!currentUser || !onRepostCreated || isSharing) return
+
+    setIsSharing(true)
+    setActionError(null)
+    try {
+      const share = await postApi.share(post.id, repostText.trim())
+      setShareCount((count) => count + 1)
+      setRepostText("")
+      setIsRepostOpen(false)
+      onRepostCreated({
+        id: share.id,
+        author: currentUser,
+        content: share.content ?? "",
+        timestamp: t("post.actions.justNow"),
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        aiState: "monitoring",
+        sharedPost: post,
+      })
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : t("post.actions.actionError"))
+    } finally {
+      setIsSharing(false)
+    }
+  }
 
   return (
     <motion.div
@@ -102,6 +251,8 @@ export function PostCard({ post, onViewAnalysis }: PostCardProps) {
           <p className="text-foreground mb-4 whitespace-pre-wrap">{post.content}</p>
         )}
 
+        {post.sharedPost && <SharedPostPreview post={post.sharedPost} />}
+
         {post.media && (
           <div className="rounded-lg overflow-hidden border border-border mb-4 relative">
             {isVideoMedia(post.media) ? (
@@ -137,23 +288,171 @@ export function PostCard({ post, onViewAnalysis }: PostCardProps) {
         )}
 
         <div className="flex justify-between items-center text-muted pt-4 border-t border-border">
-          <button className="flex items-center gap-2 hover:text-accent-pink transition-colors group">
-            <Heart className="w-5 h-5 group-hover:scale-110 transition-transform" />
-            <span className="text-sm">{post.likes.toLocaleString()}</span>
+          <button
+            type="button"
+            onClick={toggleLike}
+            disabled={!canInteract || isSavingLike}
+            className={cn(
+              "flex items-center gap-2 transition-colors group disabled:cursor-not-allowed disabled:opacity-50",
+              isLiked ? "text-accent-pink" : "hover:text-accent-pink"
+            )}
+            aria-pressed={isLiked}
+            title={isLiked ? t("post.actions.unlike") : t("post.actions.like")}
+          >
+            <Heart className={cn("w-5 h-5 group-hover:scale-110 transition-transform", isLiked && "fill-current")} />
+            <span className="text-sm">{likeCount.toLocaleString()}</span>
           </button>
-          <button className="flex items-center gap-2 hover:text-accent-blue transition-colors group">
+          <button
+            type="button"
+            onClick={toggleComments}
+            className={cn(
+              "flex items-center gap-2 transition-colors group",
+              isCommentsOpen ? "text-accent-blue" : "hover:text-accent-blue"
+            )}
+            aria-expanded={isCommentsOpen}
+            title={t("post.actions.comment")}
+          >
             <MessageSquare className="w-5 h-5 group-hover:scale-110 transition-transform" />
-            <span className="text-sm">{post.comments.toLocaleString()}</span>
+            <span className="text-sm">{commentCount.toLocaleString()}</span>
           </button>
-          <button className="flex items-center gap-2 hover:text-green-400 transition-colors group">
+          <button
+            type="button"
+            onClick={() => setIsRepostOpen(true)}
+            disabled={!canInteract || !onRepostCreated || isSharing}
+            className="flex items-center gap-2 hover:text-green-400 transition-colors group disabled:cursor-not-allowed disabled:opacity-50"
+            title={t("post.actions.repost")}
+          >
             <Repeat2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
-            <span className="text-sm">{post.shares.toLocaleString()}</span>
+            <span className="text-sm">{shareCount.toLocaleString()}</span>
           </button>
-          <button className="flex items-center gap-2 hover:text-foreground transition-colors">
+          <button
+            type="button"
+            onClick={() => setIsRepostOpen(true)}
+            disabled={!canInteract || !onRepostCreated || isSharing}
+            className="flex items-center gap-2 hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            title={t("post.actions.share")}
+          >
             <Share className="w-5 h-5" />
           </button>
         </div>
+
+        {actionError && (
+          <div className="mt-4 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-foreground">
+            {actionError}
+          </div>
+        )}
+
+        <AnimatePresence>
+          {isCommentsOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="mt-4 space-y-3 border-t border-border pt-4">
+                {isLoadingComments && (
+                  <div className="rounded-lg border border-border bg-panel/50 px-3 py-3 text-sm text-muted">
+                    {t("post.actions.loadingComments")}
+                  </div>
+                )}
+                {!isLoadingComments && localComments.length === 0 && (
+                  <div className="rounded-lg border border-border bg-panel/50 px-3 py-3 text-sm text-muted">
+                    {t("post.actions.noComments")}
+                  </div>
+                )}
+                {localComments.map((comment) => (
+                  <div key={comment.id} className="flex gap-3">
+                    <Avatar src={comment.author.avatar} fallback={comment.author.username[0]} className="h-8 w-8" />
+                    <div className="min-w-0 flex-1 rounded-lg bg-panel px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-foreground">{comment.author.username}</span>
+                        <span className="text-xs text-muted">{comment.timestamp}</span>
+                      </div>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{comment.content}</p>
+                    </div>
+                  </div>
+                ))}
+                <form onSubmit={submitComment} className="flex items-center gap-2 pt-1">
+                  <Avatar src={currentUser?.avatar ?? post.author.avatar} fallback={(currentUser?.username ?? post.author.username)[0]} className="h-8 w-8" />
+                  <input
+                    value={commentDraft}
+                    onChange={(event) => setCommentDraft(event.target.value)}
+                    placeholder={t("post.actions.commentPlaceholder")}
+                    className="h-10 flex-1 rounded-lg border border-border bg-panel px-3 text-sm text-foreground outline-none focus:border-accent-blue"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!commentDraft.trim() || isSubmittingComment}
+                    className="h-10 w-10 rounded-lg border border-accent-blue/40 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/20 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center transition-colors"
+                    title={t("post.actions.postComment")}
+                  >
+                    <Send className="h-4 w-4" />
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
+
+      {typeof document !== "undefined" && createPortal(
+        <AnimatePresence>
+          {isRepostOpen && (
+            <motion.div
+              className="fixed inset-0 z-[10000] flex items-center justify-center bg-background/85 p-4 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 16, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.96 }}
+                className="glass-panel w-full max-w-xl overflow-hidden rounded-xl border border-border shadow-[var(--shadow-neon-blue)]"
+              >
+                <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                  <h2 className="text-base font-bold text-foreground">{t("post.actions.repostTitle")}</h2>
+                  <button
+                    type="button"
+                    onClick={() => setIsRepostOpen(false)}
+                    aria-label={t("common.cancel")}
+                    className="h-9 w-9 rounded-full text-muted hover:bg-panel-hover hover:text-foreground flex items-center justify-center transition-colors"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="max-h-[75vh] overflow-y-auto p-4">
+                  <div className="mb-4 flex items-center gap-3">
+                    <Avatar src={currentUser?.avatar ?? post.author.avatar} fallback={(currentUser?.username ?? post.author.username)[0]} />
+                    <div>
+                      <div className="font-bold text-foreground">{currentUser?.username ?? post.author.username}</div>
+                      <div className="text-xs text-muted">{t("post.actions.repostAudience")}</div>
+                    </div>
+                  </div>
+                  <textarea
+                    value={repostText}
+                    onChange={(event) => setRepostText(event.target.value)}
+                    placeholder={t("post.actions.repostPlaceholder")}
+                    className="mb-4 min-h-28 w-full resize-none rounded-lg border border-border bg-panel px-3 py-3 text-sm text-foreground outline-none focus:border-accent-blue"
+                  />
+                  <SharedPostPreview post={post} />
+                </div>
+                <div className="flex items-center justify-end gap-3 border-t border-border bg-panel/80 px-4 py-3">
+                  <Button type="button" variant="outline" onClick={() => setIsRepostOpen(false)}>
+                    {t("common.cancel")}
+                  </Button>
+                  <Button type="button" variant="neon-blue" className="gap-2" onClick={submitRepost} disabled={!canInteract || isSharing}>
+                    <Repeat2 className="h-4 w-4" />
+                    {isSharing ? `${t("post.actions.repostSubmit")}...` : t("post.actions.repostSubmit")}
+                  </Button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </motion.div>
   )
 }

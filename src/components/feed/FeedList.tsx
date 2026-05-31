@@ -3,7 +3,7 @@ import { MOCK_POSTS } from "@/mocks/data"
 import { PostCard } from "./PostCard"
 import type { Post } from "@/mocks/types"
 import { postApi } from "@/lib/api"
-import {useTranslation} from "react-i18next"
+import { useTranslation } from "react-i18next"
 
 interface FeedListProps {
   searchQuery?: string
@@ -34,6 +34,10 @@ export function FeedList({ searchQuery = "", onViewAnalysis }: FeedListProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { t } = useTranslation()
+
+  const prependRepost = useCallback((post: Post) => {
+    setPosts((currentPosts) => [post, ...currentPosts])
+  }, [])
 
   const loadPosts = useCallback(async () => {
     const normalizedQuery = searchQuery.trim()
@@ -74,7 +78,7 @@ export function FeedList({ searchQuery = "", onViewAnalysis }: FeedListProps) {
       )}
 
       {posts.map((post) => (
-        <PostCard key={post.id} post={post} onViewAnalysis={onViewAnalysis} />
+        <PostCard key={post.id} post={post} onViewAnalysis={onViewAnalysis} onRepostCreated={prependRepost} />
       ))}
 
       {!isLoading && posts.length === 0 && (
