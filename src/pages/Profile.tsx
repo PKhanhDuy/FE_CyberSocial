@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { ShieldCheck, Network, Activity, Settings, MapPin, Link as LinkIcon, Edit2, UserCircle, Heart, Briefcase, GraduationCap, Globe, Languages, Cake, Camera, HelpCircle, Moon, Sun, LogOut, ChevronLeft, KeyRound, Check } from "lucide-react"
+import { ShieldCheck, Network, Activity, Settings, MapPin, Link as LinkIcon, Edit2, UserCircle, Heart, Briefcase, GraduationCap, Globe, Languages, Cake, Camera, HelpCircle, Moon, Sun, LogOut, ChevronLeft, ChevronRight, KeyRound, Check, Images, Music2, Plus, Play, Trash2, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { PostCard } from "@/components/feed/PostCard"
@@ -8,12 +8,15 @@ import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
 import type { Post } from "@/mocks/types"
 import { Progress } from "@/components/ui/Progress"
 import { postApi, uploadApi } from "@/lib/api"
+import { createStoryHighlight, loadStoryHighlights, removeStoryFromHighlight, removeStoryHighlight, STORY_HIGHLIGHTS_EVENT, type StoryHighlight } from "@/lib/storyHighlights"
 import { useAuthStore } from "@/store/useAuthStore"
 import { useThemeStore } from "@/store/useThemeStore"
 import { useLanguageStore } from "@/store/useLanguageStore"
 
 type SettingsMenuView = "main" | "privacy" | "language"
 
+const DEFAULT_HIGHLIGHT_MUSIC_DURATION_MS = 20_000
+const DEFAULT_HIGHLIGHT_IMAGE_DURATION_MS = 20_000
 
 export function Profile() {
   const navigate = useNavigate()
@@ -34,10 +37,20 @@ export function Profile() {
   const [userPosts, setUserPosts] = useState<Post[]>([])
   const [postsError, setPostsError] = useState<string | null>(null)
   const [profileError, setProfileError] = useState<string | null>(null)
+  const [storyHighlights, setStoryHighlights] = useState<StoryHighlight[]>([])
+  const [isCreatingHighlight, setIsCreatingHighlight] = useState(false)
+  const [newHighlightTitle, setNewHighlightTitle] = useState("")
+  const [selectedHighlightId, setSelectedHighlightId] = useState<string | null>(null)
+  const [selectedHighlightItemIndex, setSelectedHighlightItemIndex] = useState(0)
+  const [highlightItemProgress, setHighlightItemProgress] = useState(0)
+  const [highlightMusicError, setHighlightMusicError] = useState<string | null>(null)
+  const [pendingDeleteHighlightId, setPendingDeleteHighlightId] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
   const settingsMenuRef = useRef<HTMLDivElement>(null)
+  const highlightAudioRef = useRef<HTMLAudioElement>(null)
+  const highlightVideoRef = useRef<HTMLVideoElement>(null)
 
   const TABS = [
     { id: "activity", label: t("profile.activity"), icon: Activity },
@@ -69,6 +82,16 @@ export function Profile() {
       setProfileError("Khong tai duoc ho so tai khoan")
     })
   }, [refreshCurrentUser])
+
+  useEffect(() => {
+    const loadHighlights = () => {
+      setStoryHighlights(loadStoryHighlights(currentUser?.id))
+    }
+
+    loadHighlights()
+    window.addEventListener(STORY_HIGHLIGHTS_EVENT, loadHighlights)
+    return () => window.removeEventListener(STORY_HIGHLIGHTS_EVENT, loadHighlights)
+  }, [currentUser?.id])
 
   useEffect(() => {
     if (!isSettingsMenuOpen) return
@@ -202,6 +225,130 @@ export function Profile() {
     setIsSettingsMenuOpen(false)
     setSettingsMenuView("main")
   }
+
+  const handleCreateHighlightGroup = () => {
+    setStoryHighlights(createStoryHighlight(currentUser?.id, newHighlightTitle || "Tin nổi bật"))
+    setNewHighlightTitle("")
+    setIsCreatingHighlight(false)
+  }
+
+  const selectedHighlight = storyHighlights.find((highlight) => highlight.id === selectedHighlightId)
+  const selectedHighlightItem = selectedHighlight?.items[selectedHighlightItemIndex]
+
+  useEffect(() => {
+    const audio = highlightAudioRef.current
+    if (!audio) return
+
+    audio.pause()
+    audio.currentTime = 0
+    setHighlightMusicError(null)
+
+    if (!selectedHighlightItem?.music?.audioUrl) return
+
+    audio.src = selectedHighlightItem.music.audioUrl
+    audio.currentTime = (selectedHighlightItem.musicStartMs ?? 0) / 1000
+    const timeoutId = window.setTimeout(() => {
+      audio.pause()
+    }, selectedHighlightItem.musicDurationMs ?? DEFAULT_HIGHLIGHT_MUSIC_DURATION_MS)
+
+    audio.play().catch(() => {
+      setHighlightMusicError("Không phát được nhạc của tin này")
+    })
+
+    return () => {
+      window.clearTimeout(timeoutId)
+      audio.pause()
+      audio.currentTime = 0
+    }
+  }, [selectedHighlightItem?.id, selectedHighlightItem?.music?.audioUrl, selectedHighlightItem?.musicStartMs, selectedHighlightItem?.musicDurationMs])
+
+  const openHighlightViewer = (highlight: StoryHighlight) => {
+    if (highlight.items.length === 0) {
+      setIsCreatingHighlight(true)
+      return
+    }
+
+    setSelectedHighlightId(highlight.id)
+    setSelectedHighlightItemIndex(0)
+  }
+
+  const closeHighlightViewer = () => {
+    highlightAudioRef.current?.pause()
+    highlightVideoRef.current?.pause()
+    setSelectedHighlightId(null)
+    setSelectedHighlightItemIndex(0)
+    setHighlightItemProgress(0)
+  }
+
+  const showPreviousHighlightItem = () => {
+    if (!selectedHighlight) return
+    setSelectedHighlightItemIndex((currentIndex) => (
+      currentIndex === 0 ? selectedHighlight.items.length - 1 : currentIndex - 1
+    ))
+  }
+
+  const showNextHighlightItem = () => {
+    if (!selectedHighlight) return
+    if (selectedHighlightItemIndex >= selectedHighlight.items.length - 1) {
+      closeHighlightViewer()
+      return
+    }
+
+    setSelectedHighlightItemIndex((currentIndex) => Math.min(currentIndex + 1, selectedHighlight.items.length - 1))
+  }
+
+  const removeCurrentHighlightItem = () => {
+    if (!selectedHighlight || !selectedHighlightItem) return
+
+    const nextHighlights = removeStoryFromHighlight(currentUser?.id, selectedHighlight.id, selectedHighlightItem.id)
+    const updatedHighlight = nextHighlights.find((highlight) => highlight.id === selectedHighlight.id)
+    setStoryHighlights(nextHighlights)
+
+    if (!updatedHighlight || updatedHighlight.items.length === 0) {
+      closeHighlightViewer()
+      return
+    }
+
+    setSelectedHighlightItemIndex((currentIndex) => (
+      Math.min(currentIndex, updatedHighlight.items.length - 1)
+    ))
+    setHighlightItemProgress(0)
+  }
+
+  const removeHighlightGroup = (highlightId: string) => {
+    const nextHighlights = removeStoryHighlight(currentUser?.id, highlightId)
+    setStoryHighlights(nextHighlights)
+    setPendingDeleteHighlightId(null)
+
+    if (selectedHighlightId === highlightId) {
+      closeHighlightViewer()
+    }
+  }
+
+  const updateHighlightVideoProgress = () => {
+    const video = highlightVideoRef.current
+    if (!video || !Number.isFinite(video.duration) || video.duration === 0) return
+    setHighlightItemProgress(Math.min(100, (video.currentTime / video.duration) * 100))
+  }
+
+  useEffect(() => {
+    setHighlightItemProgress(0)
+    if (!selectedHighlightItem || selectedHighlightItem.mediaType === "video") return
+
+    const durationMs = selectedHighlightItem.musicDurationMs ?? DEFAULT_HIGHLIGHT_IMAGE_DURATION_MS
+    const startedAt = Date.now()
+    const intervalId = window.setInterval(() => {
+      setHighlightItemProgress(Math.min(100, ((Date.now() - startedAt) / durationMs) * 100))
+    }, 100)
+    const timeoutId = window.setTimeout(() => {
+      showNextHighlightItem()
+    }, durationMs)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.clearTimeout(timeoutId)
+    }
+  }, [selectedHighlightItem?.id, selectedHighlightItem?.mediaType, selectedHighlightItem?.musicDurationMs])
 
   const renderField = (field: string, label: string, icon: React.ReactNode, type: string = "text", options?: string[]) => {
     const isEditing = editingField === field;
@@ -535,15 +682,11 @@ export function Profile() {
             <div className="flex gap-8 pt-4 border-t border-border">
               <div>
                 <div className="text-xl font-bold text-foreground tracking-wider">8,492</div>
-                <div className="text-xs text-muted uppercase tracking-widest">Node mạng</div>
-              </div>
-              <div>
-                <div className="text-xl font-bold text-foreground tracking-wider">1.2M</div>
-                <div className="text-xs text-muted uppercase tracking-widest">Lưu lượng dữ liệu</div>
+                <div className="text-xs text-muted uppercase tracking-widest">{t("profile.postsCount")}</div>
               </div>
               <div>
                 <div className="text-xl font-bold text-accent-blue tracking-wider">{userProfile.trustScore}%</div>
-                <div className="text-xs text-muted uppercase tracking-widest">Chỉ số tin cậy</div>
+                <div className="text-xs text-muted uppercase tracking-widest">{t("profile.trustRate")}</div>
               </div>
             </div>
           </div>
@@ -555,6 +698,133 @@ export function Profile() {
           {profileError}
         </div>
       )}
+
+      <section className="glass-panel border border-border rounded-xl p-4 sm:p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Images className="h-5 w-5 text-accent-blue" />
+            <h2 className="text-lg font-bold text-foreground">{t("profile.highlightStory")}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsCreatingHighlight((current) => !current)}
+            className="h-10 rounded-lg border border-border bg-panel px-3 text-sm font-bold text-foreground hover:border-accent-blue/50 hover:bg-panel-hover transition-colors flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4 text-accent-blue" />
+            {t("profile.createGroup")}
+          </button>
+        </div>
+
+        {isCreatingHighlight && (
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+            <input
+              value={newHighlightTitle}
+              onChange={(event) => setNewHighlightTitle(event.target.value)}
+              placeholder={t("profile.createGroupPlaceholder")}
+              className="h-11 flex-1 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-accent-blue"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleCreateHighlightGroup}
+                className="h-11 rounded-lg bg-accent-blue px-4 text-sm font-bold text-black hover:bg-white transition-colors"
+              >
+                {t("profile.save")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCreatingHighlight(false)
+                  setNewHighlightTitle("")
+                }}
+                className="h-11 rounded-lg border border-border bg-panel px-4 text-sm font-bold text-muted hover:bg-panel-hover hover:text-foreground transition-colors"
+              >
+                {t("profile.cancel")}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-3 overflow-x-auto pb-1 hide-scrollbar">
+          {storyHighlights.map((highlight) => {
+            const coverItem = highlight.items[0]
+            return (
+              <div
+                key={highlight.id}
+                className="group relative w-28 shrink-0 text-center"
+              >
+                <button
+                  type="button"
+                  onClick={() => openHighlightViewer(highlight)}
+                  className="w-full rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue"
+                  title={highlight.title}
+                >
+                  <div className="relative h-36 overflow-hidden rounded-lg border border-border bg-panel-hover">
+                    {highlight.coverUrl ? (
+                      <img src={highlight.coverUrl} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center text-muted">
+                        <Images className="h-8 w-8" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/75" />
+                    {coverItem?.mediaType === "video" && (
+                      <div className="absolute right-2 top-2 h-8 w-8 rounded-full bg-black/55 text-white backdrop-blur flex items-center justify-center">
+                        <Play className="h-4 w-4 fill-current" />
+                      </div>
+                    )}
+                    <div className="absolute bottom-2 left-2 rounded-full bg-black/65 px-2 py-1 text-xs font-bold text-white backdrop-blur">
+                      + {Math.max(highlight.items.length, 0)}
+                    </div>
+                  </div>
+                  <div className="mt-2 truncate text-sm font-bold text-foreground">{highlight.title}</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingDeleteHighlightId(highlight.id)}
+                  aria-label="Xóa nhóm tin nổi bật"
+                  title={t("profile.deleteGroup")}
+                  className="absolute right-1.5 top-1.5 h-6 w-6 rounded-full border border-white/20 bg-black/65 text-white/75 opacity-0 shadow-lg backdrop-blur transition-all hover:border-red-300/60 hover:bg-red-500/25 hover:text-white focus:opacity-100 group-hover:opacity-100 flex items-center justify-center"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+                {pendingDeleteHighlightId === highlight.id && (
+                  <div className="absolute right-0 top-8 z-30 w-28 rounded-lg border border-red-400/40 bg-black/90 p-2 text-white shadow-2xl backdrop-blur">
+                    <div className="mb-2 text-center text-xs font-bold">{t("profile.deleteGroup")}?</div>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => removeHighlightGroup(highlight.id)}
+                        className="h-7 flex-1 rounded-md bg-red-500/90 text-[11px] font-bold text-white hover:bg-red-400 transition-colors"
+                      >
+                        {t("profile.delete")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingDeleteHighlightId(null)}
+                        className="h-7 flex-1 rounded-md bg-white/10 text-[11px] font-bold text-white/80 hover:bg-white/20 hover:text-white transition-colors"
+                      >
+                        {t("profile.cancel")}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          <button
+            type="button"
+            onClick={() => setIsCreatingHighlight(true)}
+            className="w-28 shrink-0 rounded-lg border border-dashed border-border bg-panel/50 p-3 text-center text-muted hover:border-accent-blue/60 hover:text-accent-blue transition-colors"
+          >
+            <div className="mx-auto mb-2 h-11 w-11 rounded-full bg-accent-blue/15 text-accent-blue flex items-center justify-center">
+              <Plus className="h-5 w-5" />
+            </div>
+            <span className="text-sm font-bold">{t("profile.newGroup")}</span>
+          </button>
+        </div>
+      </section>
 
       {/* Navigation Tabs */}
       <div id="profile-tabs" className="flex gap-2 border-b border-border sticky top-0 bg-background/ backdrop-blur-md z-10 pt-2 overflow-x-auto hide-scrollbar">
@@ -729,6 +999,136 @@ export function Profile() {
 
       {selectedPost && (
         <AIAnalysisModal post={selectedPost} onClose={() => setSelectedPost(null)} />
+      )}
+
+      {selectedHighlight && selectedHighlightItem && (
+        <div className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+          <audio
+            ref={highlightAudioRef}
+            preload="metadata"
+            className="hidden"
+            onError={() => setHighlightMusicError("Không phát được nhạc của tin này")}
+          />
+
+          {selectedHighlight.items.length > 1 && (
+            <button
+              type="button"
+              onClick={showPreviousHighlightItem}
+              aria-label="Tin nổi bật trước"
+              className="fixed left-4 sm:left-[calc(50%-270px)] top-1/2 z-[10000] h-12 w-12 -translate-y-1/2 rounded-full border border-white/30 bg-black/80 text-white shadow-lg backdrop-blur hover:bg-white/20 transition-colors flex items-center justify-center"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+          )}
+
+          <div className="relative w-full max-w-[360px]">
+            <div className="absolute -right-2 -top-14 z-[10000] flex items-center gap-2 sm:-right-14 sm:top-0 sm:flex-col">
+              <button
+                type="button"
+                onClick={closeHighlightViewer}
+                aria-label="Đóng tin nổi bật"
+                title="Đóng"
+                className="h-11 w-11 rounded-full border border-white/30 bg-black/80 text-white shadow-lg backdrop-blur hover:bg-white/20 transition-colors flex items-center justify-center"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={removeCurrentHighlightItem}
+                aria-label="Xóa tin khỏi nhóm nổi bật"
+                title="Xóa khỏi nhóm"
+                className="h-11 w-11 rounded-full border border-red-400/50 bg-black/80 text-red-200 shadow-lg backdrop-blur hover:bg-red-500/20 hover:text-white transition-colors flex items-center justify-center"
+              >
+                <Trash2 className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="relative h-[82vh] max-h-[760px] w-full overflow-hidden rounded-xl border border-white/15 bg-black shadow-2xl">
+              {selectedHighlightItem.mediaType === "video" ? (
+                <video
+                  ref={highlightVideoRef}
+                  src={selectedHighlightItem.mediaUrl}
+                  autoPlay
+                  controls
+                  playsInline
+                  onLoadedMetadata={updateHighlightVideoProgress}
+                  onTimeUpdate={updateHighlightVideoProgress}
+                  onEnded={showNextHighlightItem}
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <img src={selectedHighlightItem.mediaUrl} alt="" className="h-full w-full object-cover" />
+              )}
+
+              <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/80 to-transparent p-4">
+                <div className="mb-4 flex gap-1">
+                  {selectedHighlight.items.map((item, index) => (
+                    <div key={item.id} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
+                      <div
+                        className="h-full rounded-full bg-white transition-[width] duration-150"
+                        style={{
+                          width: index < selectedHighlightItemIndex
+                            ? "100%"
+                            : index === selectedHighlightItemIndex
+                              ? `${highlightItemProgress}%`
+                              : "0%",
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <img
+                    src={userProfile.avatar}
+                    alt={userProfile.username}
+                    className="h-10 w-10 rounded-full border border-white/40 object-cover"
+                  />
+                  <div className="min-w-0">
+                    <div className="truncate font-bold text-white">{selectedHighlight.title}</div>
+                    <div className="truncate text-xs font-mono text-white/65">
+                      {selectedHighlightItemIndex + 1}/{selectedHighlight.items.length} tin
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {(selectedHighlightItem.caption || selectedHighlightItem.createdAt || selectedHighlightItem.music || highlightMusicError) && (
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-5">
+                  {selectedHighlightItem.music && (
+                    <div className="mb-3 inline-flex max-w-full items-center gap-2 rounded-full border border-white/20 bg-black/55 px-3 py-2 text-white backdrop-blur">
+                      <Music2 className="w-4 h-4 text-accent-pink shrink-0" />
+                      <span className="text-xs font-bold truncate">{selectedHighlightItem.music.title}</span>
+                      <span className="text-xs text-white/60 truncate">- {selectedHighlightItem.music.artist}</span>
+                    </div>
+                  )}
+                  {highlightMusicError && selectedHighlightItem.music && (
+                    <div className="mb-3 rounded-lg border border-white/20 bg-black/70 px-3 py-2 text-xs text-white/80 backdrop-blur">
+                      {highlightMusicError}
+                    </div>
+                  )}
+                  {selectedHighlightItem.caption && (
+                    <p className="text-sm leading-relaxed text-white">{selectedHighlightItem.caption}</p>
+                  )}
+                  {selectedHighlightItem.createdAt && (
+                    <div className="mt-2 text-xs font-mono text-white/60">{selectedHighlightItem.createdAt}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {selectedHighlight.items.length > 1 && (
+            <button
+              type="button"
+              onClick={showNextHighlightItem}
+              aria-label="Tin nổi bật tiếp theo"
+              className="fixed right-4 sm:right-[calc(50%-270px)] top-1/2 z-[10000] h-12 w-12 -translate-y-1/2 rounded-full border border-white/30 bg-black/80 text-white shadow-lg backdrop-blur hover:bg-white/20 transition-colors flex items-center justify-center"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </button>
+          )}
+        </div>
       )}
     </div>
   )

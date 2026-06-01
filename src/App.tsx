@@ -8,6 +8,7 @@ import { PublicProfile } from "./pages/PublicProfile"
 import { Notifications } from "./pages/Notifications"
 import { VerifiedNews } from "./pages/VerifiedNews"
 import { Friends } from "./pages/Friends"
+import { Messages } from "./pages/Messages"
 import { useThemeStore } from "./store/useThemeStore"
 import { useAuthStore } from "./store/useAuthStore"
 import { useFriendStore } from "./store/useFriendStore"
@@ -55,6 +56,7 @@ function App() {
 
         {/* Protected routes */}
         <Route element={<AuthGuard />}>
+          <Route path="/messages" element={<Messages />} />
           <Route path="/" element={<MainLayout />}>
             <Route index element={<Home />} />
             <Route path="explore" element={<Explore />} />

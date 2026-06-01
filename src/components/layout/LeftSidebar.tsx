@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { NavLink } from "react-router-dom"
-import { Home, Compass, CheckCircle, User, Bell, Users } from "lucide-react"
+import { Home, Compass, CheckCircle, User, Bell, Users, MessageCircle } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { CreatePostModal } from "@/components/feed/CreatePostModal"
@@ -12,6 +12,7 @@ const navItems = [
   { icon: Compass, labelKey: "nav.explore", path: "/explore" },
   { icon: CheckCircle, labelKey: "nav.verifiedNews", path: "/verified" },
   { icon: Users, labelKey: "nav.friends", path: "/friends" },
+  { icon: MessageCircle, labelKey: "nav.messages", path: "/messages" },
   { icon: Bell, labelKey: "nav.notifications", path: "/notifications" },
   { icon: User, labelKey: "nav.profile", path: "/profile" },
 ]

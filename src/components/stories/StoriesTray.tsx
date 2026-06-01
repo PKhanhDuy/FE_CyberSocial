@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { AnimatePresence, motion } from "framer-motion"
-import { Camera, ChevronLeft, ChevronRight, ChevronUp, ImagePlus, Music2, Play, Plus, Send, Video, X } from "lucide-react"
+import { Camera, Check, ChevronLeft, ChevronRight, ChevronUp, ImagePlus, Music2, Play, Plus, Send, Video, X } from "lucide-react"
 import { Avatar } from "@/components/ui/Avatar"
 import { Button } from "@/components/ui/Button"
 import { cn } from "@/lib/utils"
 import { useAuthStore } from "@/store/useAuthStore"
 import { musicTrackApi, storyApi, uploadApi, type BackendMusicTrack, type BackendStory } from "@/lib/api"
+import { addStoryToHighlight, createStoryHighlight, loadStoryHighlights, STORY_HIGHLIGHTS_EVENT, type StoryHighlight } from "@/lib/storyHighlights"
 import type { User } from "@/mocks/types"
 import { useTranslation } from "react-i18next"
 type StoryMediaType = "image" | "video"
@@ -186,6 +187,7 @@ const mapBackendStory = (story: BackendStory, currentUserId: string | undefined,
 export function StoriesTray() {
   const currentUser = useAuthStore((state) => state.user)
   const storyOwner = currentUser ?? fallbackUser
+  const highlightOwnerId = currentUser?.id || storyOwner.id
   const [stories, setStories] = useState<Story[]>([])
   const [musicTracks, setMusicTracks] = useState<MusicTrack[]>([])
   const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null)
@@ -200,6 +202,10 @@ export function StoriesTray() {
   const [floatingReactions, setFloatingReactions] = useState<Array<{ id: string; emoji: string }>>([])
   const [isReacting, setIsReacting] = useState(false)
   const [isViewerListOpen, setIsViewerListOpen] = useState(false)
+  const [highlightGroups, setHighlightGroups] = useState<StoryHighlight[]>([])
+  const [isHighlightPickerOpen, setIsHighlightPickerOpen] = useState(false)
+  const [newHighlightTitle, setNewHighlightTitle] = useState("")
+  const [highlightMessage, setHighlightMessage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const storyVideoRef = useRef<HTMLVideoElement>(null)
   const storyAudioRef = useRef<HTMLAudioElement>(null)
@@ -208,6 +214,9 @@ export function StoriesTray() {
   const [storyVideoProgress, setStoryVideoProgress] = useState(0)
   const { t } = useTranslation()
   const selectedStory = selectedStoryIndex === null ? null : stories[selectedStoryIndex]
+  const isSelectedStoryInAnyHighlight = selectedStory
+    ? highlightGroups.some((highlight) => highlight.items.some((item) => item.storyId === selectedStory.id))
+    : false
   const selectedStoryViewerActivities: StoryViewerActivity[] = selectedStory
     ? (() => {
       const reactionByUser = new Map((selectedStory.reactions ?? []).map((reaction) => [reaction.id, reaction]))
@@ -277,12 +286,24 @@ export function StoriesTray() {
   useEffect(() => {
     setStoryVideoProgress(0)
     setIsViewerListOpen(false)
+    setIsHighlightPickerOpen(false)
+    setHighlightMessage(null)
     if (selectedStory?.mediaType !== "video") return
 
     window.setTimeout(() => {
       void storyVideoRef.current?.play()
     }, 0)
   }, [selectedStory?.id, selectedStory?.mediaType])
+
+  useEffect(() => {
+    const loadHighlights = () => {
+      setHighlightGroups(loadStoryHighlights(highlightOwnerId))
+    }
+
+    loadHighlights()
+    window.addEventListener(STORY_HIGHLIGHTS_EVENT, loadHighlights)
+    return () => window.removeEventListener(STORY_HIGHLIGHTS_EVENT, loadHighlights)
+  }, [highlightOwnerId])
 
   useEffect(() => {
     if (!selectedStory || selectedStory.mediaType === "video") return
@@ -551,6 +572,41 @@ export function StoriesTray() {
     storyApi.react(selectedStory.id, emoji)
       .catch(() => undefined)
       .finally(() => setIsReacting(false))
+  }
+
+  const getHighlightStoryInput = (story: Story) => ({
+    storyId: story.id,
+    mediaUrl: story.mediaUrl,
+    mediaType: story.mediaType,
+    caption: story.caption,
+    createdAt: story.createdAt,
+    music: story.music,
+    musicStartMs: story.musicStartMs,
+    musicDurationMs: story.musicDurationMs,
+  })
+
+  const handleAddStoryToHighlight = (highlightId: string) => {
+    if (!selectedStory) return
+    const targetHighlight = highlightGroups.find((highlight) => highlight.id === highlightId)
+
+    if (targetHighlight?.items.some((item) => item.storyId === selectedStory.id)) {
+      setHighlightGroups(addStoryToHighlight(highlightOwnerId, highlightId, getHighlightStoryInput(selectedStory)))
+      setHighlightMessage(`Tin này đã có trong "${targetHighlight.title}"`)
+      return
+    }
+
+    setHighlightGroups(addStoryToHighlight(highlightOwnerId, highlightId, getHighlightStoryInput(selectedStory)))
+    setHighlightMessage("Đã thêm vào tin nổi bật")
+    setIsHighlightPickerOpen(false)
+  }
+
+  const handleCreateHighlightFromStory = () => {
+    if (!selectedStory) return
+
+    setHighlightGroups(createStoryHighlight(highlightOwnerId, newHighlightTitle, getHighlightStoryInput(selectedStory)))
+    setNewHighlightTitle("")
+    setHighlightMessage("Đã tạo nhóm tin nổi bật")
+    setIsHighlightPickerOpen(false)
   }
 
   return (
@@ -929,14 +985,127 @@ export function StoriesTray() {
                         style={{ width: `${storyVideoProgress}%` }}
                       />
                     </div>
-                    <div className="flex items-center gap-3">
-                      <Avatar src={selectedStory.author.avatar} fallback={selectedStory.author.username[0]} className="h-10 w-10 border-white/40" />
-                      <div>
-                        <div className="text-white font-bold">{selectedStory.author.username}</div>
-                        <div className="text-xs text-white/70 font-mono">{selectedStory.createdAt}</div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <Avatar src={selectedStory.author.avatar} fallback={selectedStory.author.username[0]} className="h-10 w-10 border-white/40" />
+                        <div className="min-w-0">
+                          <div className="truncate text-white font-bold">{selectedStory.author.username}</div>
+                          <div className="text-xs text-white/70 font-mono">{selectedStory.createdAt}</div>
+                        </div>
                       </div>
+                      {selectedStory.isOwn && !selectedStory.isPublishing && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsHighlightPickerOpen((current) => !current)
+                            setHighlightMessage(null)
+                          }}
+                          aria-label="Thêm vào tin nổi bật"
+                          title="Thêm vào tin nổi bật"
+                          className={cn(
+                            "h-10 w-10 shrink-0 rounded-full border shadow-lg backdrop-blur transition-colors flex items-center justify-center",
+                            isSelectedStoryInAnyHighlight
+                              ? "border-accent-blue/70 bg-accent-blue text-black"
+                              : "border-white/30 bg-black/55 text-white hover:bg-white/20"
+                          )}
+                        >
+                          {isSelectedStoryInAnyHighlight ? <Check className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                        </button>
+                      )}
                     </div>
                   </div>
+                  {selectedStory.isOwn && (
+                    <>
+                      <AnimatePresence>
+                        {isHighlightPickerOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            className="absolute right-4 top-24 z-40 w-[min(18rem,calc(100%-2rem))] rounded-lg border border-white/15 bg-black/85 p-3 text-white shadow-2xl backdrop-blur"
+                          >
+                            <div className="mb-3 flex items-center justify-between border-b border-white/10 pb-2">
+                              <div className="text-sm font-bold">Chọn nhóm tin nổi bật</div>
+                              <button
+                                type="button"
+                                onClick={() => setIsHighlightPickerOpen(false)}
+                                aria-label="Đóng chọn tin nổi bật"
+                                className="h-7 w-7 rounded-full text-white/60 hover:bg-white/10 hover:text-white transition-colors flex items-center justify-center"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
+                              {highlightGroups.length === 0 && (
+                                <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-sm text-white/60">
+                                  Chưa có nhóm tin nổi bật.
+                                </div>
+                              )}
+                              {highlightGroups.map((highlight) => {
+                                const isAddedToHighlight = highlight.items.some((item) => item.storyId === selectedStory.id)
+
+                                return (
+                                  <button
+                                    key={highlight.id}
+                                    type="button"
+                                    onClick={() => handleAddStoryToHighlight(highlight.id)}
+                                    className={cn(
+                                      "w-full rounded-lg border px-3 py-2 text-left transition-colors flex items-center gap-3",
+                                      isAddedToHighlight
+                                        ? "border-accent-blue/55 bg-accent-blue/15"
+                                        : "border-white/10 bg-white/5 hover:border-accent-blue/60 hover:bg-accent-blue/15"
+                                    )}
+                                  >
+                                    <div className="h-10 w-10 overflow-hidden rounded-lg bg-white/10 shrink-0">
+                                      {highlight.coverUrl ? (
+                                        <img src={highlight.coverUrl} alt="" className="h-full w-full object-cover" />
+                                      ) : (
+                                        <div className="h-full w-full flex items-center justify-center text-white/45">
+                                          <Plus className="h-4 w-4" />
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="truncate text-sm font-bold">{highlight.title}</div>
+                                      <div className="text-xs text-white/45">
+                                        {isAddedToHighlight ? "Đã thêm" : `${highlight.items.length} tin`}
+                                      </div>
+                                    </div>
+                                    {isAddedToHighlight && (
+                                      <div className="h-8 w-8 rounded-full bg-accent-blue text-black flex items-center justify-center">
+                                        <Check className="h-4 w-4" />
+                                      </div>
+                                    )}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                            <div className="mt-3 border-t border-white/10 pt-3">
+                              <input
+                                value={newHighlightTitle}
+                                onChange={(event) => setNewHighlightTitle(event.target.value)}
+                                placeholder="Tên nhóm mới"
+                                className="h-10 w-full rounded-lg border border-white/15 bg-white/10 px-3 text-sm text-white outline-none placeholder:text-white/45 focus:border-accent-blue"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleCreateHighlightFromStory}
+                                className="mt-2 h-10 w-full rounded-lg bg-accent-blue text-black font-bold hover:bg-white transition-colors flex items-center justify-center gap-2"
+                              >
+                                <Plus className="w-4 h-4" />
+                                Tạo nhóm và thêm
+                              </button>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                      {highlightMessage && (
+                        <div className="absolute right-4 top-24 z-30 rounded-full border border-white/15 bg-black/75 px-3 py-2 text-xs font-bold text-white shadow-lg backdrop-blur">
+                          {highlightMessage}
+                        </div>
+                      )}
+                    </>
+                  )}
                   {(selectedStory.caption || selectedStory.music) && (
                     <div className="absolute inset-x-0 bottom-0 p-5 bg-gradient-to-t from-black/85 to-transparent">
                       {selectedStory.caption && <p className="text-white text-sm leading-relaxed">{selectedStory.caption}</p>}

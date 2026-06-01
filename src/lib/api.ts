@@ -185,6 +185,46 @@ export interface Friendship {
   updatedAt: string
 }
 
+export type MessageType = "TEXT" | "IMAGE" | "VIDEO" | "LINK"
+
+export interface MessageParticipant {
+  id: string
+  displayName: string
+  avatarUrl?: string
+}
+
+export interface MessageReaction {
+  id: string
+  messageId: string
+  userId: string
+  displayName: string
+  avatarUrl?: string
+  emoji: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface BackendMessage {
+  id: string
+  conversationId: string
+  sender: MessageParticipant
+  messageType: MessageType
+  content?: string
+  mediaUrl?: string
+  linkUrl?: string
+  reactions: MessageReaction[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MessageConversation {
+  id: string
+  friend: MessageParticipant
+  latestMessage?: BackendMessage
+  createdAt: string
+  updatedAt: string
+}
+
 interface BackendNotification {
   id: string
   type: "SYSTEM" | "POST" | "STORY" | "SECURITY"
@@ -574,6 +614,47 @@ export const friendApi = {
 
   async removeFriend(friendshipId: string) {
     return apiRequest<void>(`/api/friends/${friendshipId}`, {
+      method: "DELETE",
+    })
+  },
+}
+
+export const messageApi = {
+  async conversations() {
+    return apiRequest<MessageConversation[]>("/api/messages/conversations")
+  },
+
+  async getOrCreateConversation(friendId: string) {
+    return apiRequest<MessageConversation>(`/api/messages/conversations/friends/${friendId}`, {
+      method: "POST",
+    })
+  },
+
+  async messages(conversationId: string, page = 0, size = 50) {
+    return apiRequest<PagedResponse<BackendMessage>>(`/api/messages/conversations/${conversationId}/messages?page=${page}&size=${size}`)
+  },
+
+  async sendMessage(conversationId: string, payload: {
+    messageType: MessageType
+    content?: string
+    mediaUrl?: string
+    linkUrl?: string
+  }) {
+    return apiRequest<BackendMessage>(`/api/messages/conversations/${conversationId}/messages`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
+  },
+
+  async react(messageId: string, emoji: string) {
+    return apiRequest<MessageReaction>(`/api/messages/${messageId}/reactions`, {
+      method: "POST",
+      body: JSON.stringify({ emoji }),
+    })
+  },
+
+  async deleteReaction(messageId: string) {
+    return apiRequest<void>(`/api/messages/${messageId}/reactions`, {
       method: "DELETE",
     })
   },
