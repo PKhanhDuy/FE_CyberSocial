@@ -50,6 +50,7 @@ export interface BackendPost {
   content: string
   visibility: "PUBLIC" | "PRIVATE"
   mediaUrls: string[]
+  sharedPost?: BackendPost
   likeCount: number
   commentCount: number
   shareCount: number
@@ -246,6 +247,7 @@ export interface AppPost {
   shares: number
   isLiked?: boolean
   aiState: "monitoring" | "suspicious" | "verified"
+  sharedPost?: AppPost
 }
 
 export const getAccessToken = () => {
@@ -371,6 +373,7 @@ export const mapPost = (post: BackendPost): AppPost => ({
   shares: post.shareCount ?? 0,
   isLiked: post.likedByCurrentUser ?? false,
   aiState: "monitoring",
+  sharedPost: post.sharedPost ? mapPost(post.sharedPost) : undefined,
 })
 
 export const mapPostComment = (comment: BackendPostComment) => ({
@@ -543,10 +546,10 @@ export const postApi = {
   },
 
   async share(postId: string, content: string) {
-    return apiRequest<BackendPostShare>(`/api/posts/${postId}/shares`, {
+    return mapPost(await apiRequest<BackendPost>(`/api/posts/${postId}/shares`, {
       method: "POST",
       body: JSON.stringify({ content }),
-    })
+    }))
   },
 }
 

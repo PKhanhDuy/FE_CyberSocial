@@ -156,21 +156,11 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
     setIsSharing(true)
     setActionError(null)
     try {
-      const share = await postApi.share(post.id, repostText.trim())
+      const repost = await postApi.share(post.id, repostText.trim())
       setShareCount((count) => count + 1)
       setRepostText("")
       setIsRepostOpen(false)
-      onRepostCreated({
-        id: share.id,
-        author: currentUser,
-        content: share.content ?? "",
-        timestamp: t("post.actions.justNow"),
-        likes: 0,
-        comments: 0,
-        shares: 0,
-        aiState: "monitoring",
-        sharedPost: post,
-      })
+      onRepostCreated(repost)
     } catch (error) {
       setActionError(error instanceof Error ? error.message : t("post.actions.actionError"))
     } finally {
