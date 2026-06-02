@@ -218,6 +218,32 @@ export interface BackendMessage {
   updatedAt: string
 }
 
+export type MessageSocketEvent =
+  | {
+      type: "MESSAGE_CREATED"
+      conversationId: string
+      message: BackendMessage
+      messageId: string
+      reaction?: null
+      userId?: null
+    }
+  | {
+      type: "REACTION_UPDATED"
+      conversationId: string
+      message?: null
+      messageId: string
+      reaction: MessageReaction
+      userId: string
+    }
+  | {
+      type: "REACTION_DELETED"
+      conversationId: string
+      message?: null
+      messageId: string
+      reaction?: null
+      userId: string
+    }
+
 export interface MessageConversation {
   id: string
   friend: MessageParticipant
@@ -253,6 +279,33 @@ export interface AppPost {
 export const getAccessToken = () => {
   if (typeof window === "undefined") return null
   return window.localStorage.getItem(ACCESS_TOKEN_KEY)
+}
+
+const getMessageSocketUrl = () => {
+  const token = getAccessToken()
+  if (!token || typeof window === "undefined") return null
+
+  const url = new URL(API_BASE_URL, window.location.origin)
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
+  url.pathname = "/ws/messages"
+  url.search = ""
+  url.searchParams.set("token", token)
+  return url.toString()
+}
+
+export const createMessageSocket = (onEvent: (event: MessageSocketEvent) => void) => {
+  const url = getMessageSocketUrl()
+  if (!url) return null
+
+  const socket = new WebSocket(url)
+  socket.addEventListener("message", (message) => {
+    try {
+      onEvent(JSON.parse(message.data) as MessageSocketEvent)
+    } catch {
+      // Ignore malformed realtime payloads; REST remains the source of truth.
+    }
+  })
+  return socket
 }
 
 const setAccessToken = (token: string) => {
