@@ -1,43 +1,73 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { MOCK_POSTS } from "@/mocks/data"
 import { PostCard } from "./PostCard"
 import type { Post } from "@/mocks/types"
 import { postApi } from "@/lib/api"
+import { useTranslation } from "react-i18next"
 
 interface FeedListProps {
+  searchQuery?: string
   onViewAnalysis: (post: Post) => void
 }
 
-export function FeedList({ onViewAnalysis }: FeedListProps) {
+const normalizeSearchValue = (value: string) => value.trim().toLowerCase()
+
+const filterPosts = (posts: Post[], query: string) => {
+  const normalizedQuery = normalizeSearchValue(query)
+  if (!normalizedQuery) return posts
+
+  return posts.filter((post) => {
+    const searchableValues = [
+      post.id,
+      post.author.id,
+      post.author.username,
+      post.author.handle,
+      post.content,
+    ]
+
+    return searchableValues.some((value) => value.toLowerCase().includes(normalizedQuery))
+  })
+}
+
+export function FeedList({ searchQuery = "", onViewAnalysis }: FeedListProps) {
   const [posts, setPosts] = useState<Post[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { t } = useTranslation()
 
-  const loadPosts = async () => {
+  const prependRepost = useCallback((post: Post) => {
+    setPosts((currentPosts) => [post, ...currentPosts])
+  }, [])
+
+  const loadPosts = useCallback(async () => {
+    const normalizedQuery = searchQuery.trim()
     setIsLoading(true)
     setError(null)
     try {
-      const response = await postApi.list()
-      setPosts(response.content)
+      const response = normalizedQuery ? await postApi.search(normalizedQuery) : await postApi.list()
+      setPosts(filterPosts(response.content, normalizedQuery))
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Khong tai duoc bang tin")
-      setPosts(MOCK_POSTS)
+      setError(error instanceof Error ? error.message : t("post.noPostLoad"))
+      setPosts(filterPosts(MOCK_POSTS, normalizedQuery))
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [searchQuery])
 
   useEffect(() => {
-    loadPosts()
+    const timeoutId = window.setTimeout(loadPosts, searchQuery.trim() ? 300 : 0)
     window.addEventListener("cybersocial:post-created", loadPosts)
-    return () => window.removeEventListener("cybersocial:post-created", loadPosts)
-  }, [])
+    return () => {
+      window.clearTimeout(timeoutId)
+      window.removeEventListener("cybersocial:post-created", loadPosts)
+    }
+  }, [loadPosts, searchQuery])
 
   return (
     <div className="space-y-2 mt-6 pb-20">
       {isLoading && (
         <div className="text-center py-8 text-muted font-mono">
-          Dang tai bang tin...
+          {t("post.downloading")}
         </div>
       )}
 
@@ -48,12 +78,12 @@ export function FeedList({ onViewAnalysis }: FeedListProps) {
       )}
 
       {posts.map((post) => (
-        <PostCard key={post.id} post={post} onViewAnalysis={onViewAnalysis} />
+        <PostCard key={post.id} post={post} onViewAnalysis={onViewAnalysis} onRepostCreated={prependRepost} />
       ))}
 
       {!isLoading && posts.length === 0 && (
         <div className="text-center py-8 text-muted font-mono">
-          Chua co bai viet nao.
+          {searchQuery.trim() ? t("post.notFound") : t("post.noPosts")}
         </div>
       )}
     </div>

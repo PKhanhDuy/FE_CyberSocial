@@ -5,12 +5,14 @@ import { PostCard } from "@/components/feed/PostCard"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
 import type { Post } from "@/mocks/types"
 import { postApi } from "@/lib/api"
+import { useTranslation } from "react-i18next"
 
 export function VerifiedNews() {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { t } = useTranslation()
 
   // Filter for only verified posts
   const verifiedPosts = posts.filter(post => post.aiState === "verified")
@@ -48,16 +50,15 @@ export function VerifiedNews() {
               <ShieldCheck className="w-8 h-8 text-green-400" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-wider text-green-400">TIN TỨC XÁC THỰC</h1>
+              <h1 className="text-2xl font-bold tracking-wider text-green-400">{t("verifyedNews.title")}</h1>
               <p className="text-green-500/70 font-mono text-sm uppercase tracking-widest mt-1">
-                Giao thức kiểm duyệt AI cấp độ cao
+                {t("verifyedNews.logan")}
               </p>
             </div>
           </div>
 
           <p className="text-muted max-w-2xl leading-relaxed mb-6">
-            Khu vực này chỉ hiển thị dữ liệu đã vượt qua 100% các bài kiểm tra tính toàn vẹn của Lõi Trung Tâm.
-            Tuyệt đối không chứa Deepfake, bot thao túng, hoặc thông tin sai lệch cấu trúc.
+            {t("verifyedNews.description")}
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-green-500/20 pt-6">
@@ -65,21 +66,21 @@ export function VerifiedNews() {
               <Database className="w-5 h-5 text-green-500/50" />
               <div>
                 <div className="text-xl font-bold text-foreground tracking-wider">12,492</div>
-                <div className="text-xs text-muted uppercase tracking-widest">Nguồn đối chiếu</div>
+                <div className="text-xs text-muted uppercase tracking-widest">{t("verifyedNews.source")}</div>
               </div>
             </div>
             <div className="flex items-center gap-3">
               <Server className="w-5 h-5 text-green-500/50" />
               <div>
                 <div className="text-xl font-bold text-foreground tracking-wider">0.02ms</div>
-                <div className="text-xs text-muted uppercase tracking-widest">Độ trễ xác minh</div>
+                <div className="text-xs text-muted uppercase tracking-widest">{t("verifyedNews.timeDelay")}</div>
               </div>
             </div>
             <div className="flex items-center gap-3">
               <Lock className="w-5 h-5 text-green-500/50" />
               <div>
-                <div className="text-xl font-bold text-green-400 tracking-wider">Mã Hóa</div>
-                <div className="text-xs text-muted uppercase tracking-widest">Giao thức bảo mật</div>
+                <div className="text-xl font-bold text-green-400 tracking-wider">{t("verifyedNews.encryption")}</div>
+                <div className="text-xs text-muted uppercase tracking-widest">{t("verifyedNews.securityProtocol")}</div>
               </div>
             </div>
           </div>
@@ -90,7 +91,7 @@ export function VerifiedNews() {
       <div className="space-y-4">
         {isLoading && (
           <div className="text-center py-8 text-muted font-mono">
-            Dang tai tin xac thuc...
+            {t("verifyedNews.loading")}
           </div>
         )}
 
@@ -107,7 +108,7 @@ export function VerifiedNews() {
         ) : (
           <div className="p-8 border border-green-500/20 bg-green-500/5 rounded-xl text-center">
             <ShieldCheck className="w-12 h-12 text-green-500/30 mx-auto mb-4" />
-            <p className="text-green-400 font-mono">Đang quét toàn mạng lưới để tìm tín hiệu xác thực...</p>
+            <p className="text-green-400 font-mono">{t("verifyedNews.scanning")}</p>
           </div>
         )}
       </div>

@@ -32,8 +32,10 @@ export interface Post {
   likes: number
   comments: number
   shares: number
+  isLiked?: boolean
   aiState: AIState
   aiAnalysis?: AIAnalysis
+  sharedPost?: Post
 }
 
 export interface AIAnalysis {

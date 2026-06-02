@@ -1,5 +1,6 @@
 import type { User } from "@/mocks/types"
 import type { NotificationType } from "@/store/useNotificationStore"
+import { getStoredLanguage } from "@/i18n"
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080").replace(/\/$/, "")
 const ACCESS_TOKEN_KEY = "cybersocial_access_token"
@@ -49,8 +50,33 @@ export interface BackendPost {
   content: string
   visibility: "PUBLIC" | "PRIVATE"
   mediaUrls: string[]
+  likeCount: number
+  commentCount: number
+  shareCount: number
+  likedByCurrentUser: boolean
   createdAt: string
   updatedAt: string
+}
+
+export interface BackendPostComment {
+  id: string
+  postId: string
+  userId: string
+  authorDisplayName: string
+  authorAvatarUrl?: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface BackendPostShare {
+  id: string
+  postId: string
+  userId: string
+  authorDisplayName: string
+  authorAvatarUrl?: string
+  content?: string
+  createdAt: string
 }
 
 export interface UploadedImage {
@@ -61,9 +87,147 @@ export interface UploadedImage {
   url: string
 }
 
+export interface BackendMusicTrack {
+  id: string
+  title: string
+  artist: string
+  audioUrl: string
+  coverUrl?: string
+  durationSeconds: number
+}
+
+export interface BackendStoryMedia {
+  id: string
+  mediaType: "IMAGE" | "VIDEO"
+  mediaUrl: string
+  thumbnailUrl?: string
+  width?: number
+  height?: number
+  durationMs?: number
+}
+
+export interface BackendStoryAuthor {
+  id: string
+  displayName: string
+  avatarUrl?: string
+}
+
+export interface BackendStoryViewer {
+  userId: string
+  displayName: string
+  avatarUrl?: string
+  viewedAt: string
+}
+
+export interface BackendStoryReactionSummary {
+  userId: string
+  displayName: string
+  avatarUrl?: string
+  reactionType: string
+  createdAt: string
+}
+
+export interface BackendStory {
+  id: string
+  author: BackendStoryAuthor
+  caption?: string
+  visibility: "PUBLIC" | "FRIENDS" | "PRIVATE"
+  media: BackendStoryMedia
+  music?: BackendMusicTrack
+  musicStartMs?: number
+  musicDurationMs?: number
+  viewCount: number
+  reactionCount: number
+  viewedByCurrentUser: boolean
+  currentUserReaction?: string
+  viewers?: BackendStoryViewer[]
+  reactions?: BackendStoryReactionSummary[]
+  expiresAt: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface StoryCreatePayload {
+  caption?: string
+  visibility?: "PUBLIC" | "FRIENDS" | "PRIVATE"
+  media: {
+    mediaType: "IMAGE" | "VIDEO"
+    mediaUrl: string
+    thumbnailUrl?: string
+    width?: number
+    height?: number
+    durationMs?: number
+  }
+  musicTrackId?: string
+  musicStartMs?: number
+  musicDurationMs?: number
+}
+
+export type FriendshipStatus = "PENDING" | "ACCEPTED"
+
+export interface FriendUser {
+  id: string
+  email: string
+  displayName: string
+  avatarUrl?: string
+  coverUrl?: string
+  relationshipStatus?: FriendshipStatus
+  friendshipId?: string
+}
+
+export interface Friendship {
+  id: string
+  status: FriendshipStatus
+  requesterId: string
+  addresseeId: string
+  user: FriendUser
+  createdAt: string
+  updatedAt: string
+}
+
+export type MessageType = "TEXT" | "IMAGE" | "VIDEO" | "LINK"
+
+export interface MessageParticipant {
+  id: string
+  displayName: string
+  avatarUrl?: string
+}
+
+export interface MessageReaction {
+  id: string
+  messageId: string
+  userId: string
+  displayName: string
+  avatarUrl?: string
+  emoji: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface BackendMessage {
+  id: string
+  conversationId: string
+  sender: MessageParticipant
+  messageType: MessageType
+  content?: string
+  mediaUrl?: string
+  linkUrl?: string
+  reactions: MessageReaction[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MessageConversation {
+  id: string
+  friend: MessageParticipant
+  latestMessage?: BackendMessage
+  createdAt: string
+  updatedAt: string
+}
+
 interface BackendNotification {
   id: string
-  type: "SYSTEM" | "POST" | "SECURITY"
+  type: "SYSTEM" | "POST" | "STORY" | "SECURITY"
   title: string
   message: string
   read: boolean
@@ -80,6 +244,7 @@ export interface AppPost {
   likes: number
   comments: number
   shares: number
+  isLiked?: boolean
   aiState: "monitoring" | "suspicious" | "verified"
 }
 
@@ -129,6 +294,7 @@ async function apiRequest<T>(path: string, init: RequestInit = {}, retry = true)
   const token = getAccessToken()
   const headers = new Headers(init.headers)
   headers.set("Accept", "application/json")
+  headers.set("Accept-Language", getStoredLanguage())
 
   if (init.body && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json")
@@ -200,14 +366,28 @@ export const mapPost = (post: BackendPost): AppPost => ({
   content: post.content,
   media: post.mediaUrls?.[0],
   timestamp: relativeTime(post.createdAt),
-  likes: 0,
-  comments: 0,
-  shares: 0,
+  likes: post.likeCount ?? 0,
+  comments: post.commentCount ?? 0,
+  shares: post.shareCount ?? 0,
+  isLiked: post.likedByCurrentUser ?? false,
   aiState: "monitoring",
+})
+
+export const mapPostComment = (comment: BackendPostComment) => ({
+  id: comment.id,
+  postId: comment.postId,
+  author: {
+    id: comment.userId,
+    username: comment.authorDisplayName,
+    avatar: comment.authorAvatarUrl || `https://i.pravatar.cc/150?u=${encodeURIComponent(comment.userId)}`,
+  },
+  content: comment.content,
+  timestamp: relativeTime(comment.createdAt),
 })
 
 const mapNotificationType = (type: BackendNotification["type"]): NotificationType => {
   if (type === "SECURITY") return "system_alert"
+  if (type === "STORY") return "social_like"
   if (type === "POST") return "social_comment"
   return "network_alert"
 }
@@ -242,6 +422,20 @@ export const authApi = {
       clearAuthStorage()
     }
   },
+
+  async forgotPassword(email: string) {
+    await apiRequest<void>("/api/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }, false)
+  },
+
+  async changePassword(currentPassword: string, newPassword: string) {
+    await apiRequest<void>("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    })
+  },
 }
 
 export const userApi = {
@@ -249,6 +443,10 @@ export const userApi = {
     const user = mapUser(await apiRequest<BackendUser>("/api/users/me"))
     storeAuthUser(user)
     return user
+  },
+
+  async get(id: string) {
+    return mapUser(await apiRequest<BackendUser>(`/api/users/${id}`))
   },
 
   async updateMe(displayName: string) {
@@ -288,11 +486,67 @@ export const postApi = {
     }
   },
 
+  async search(query: string, page = 0, size = 100) {
+    const params = new URLSearchParams({
+      query,
+      page: String(page),
+      size: String(size),
+    })
+    const response = await apiRequest<PagedResponse<BackendPost>>(`/api/posts?${params.toString()}`)
+    return {
+      ...response,
+      content: response.content.map(mapPost),
+    }
+  },
+
+  async byAuthor(authorId: string, page = 0, size = 100) {
+    const params = new URLSearchParams({
+      authorId,
+      page: String(page),
+      size: String(size),
+    })
+    const response = await apiRequest<PagedResponse<BackendPost>>(`/api/posts?${params.toString()}`)
+    return {
+      ...response,
+      content: response.content.map(mapPost),
+    }
+  },
+
   async create(content: string, visibility: "PUBLIC" | "PRIVATE" = "PUBLIC", mediaUrls: string[] = []) {
     return mapPost(await apiRequest<BackendPost>("/api/posts", {
       method: "POST",
       body: JSON.stringify({ content, visibility, mediaUrls }),
     }))
+  },
+
+  async like(postId: string) {
+    return mapPost(await apiRequest<BackendPost>(`/api/posts/${postId}/likes`, {
+      method: "POST",
+    }))
+  },
+
+  async unlike(postId: string) {
+    return mapPost(await apiRequest<BackendPost>(`/api/posts/${postId}/likes`, {
+      method: "DELETE",
+    }))
+  },
+
+  async comments(postId: string) {
+    return (await apiRequest<BackendPostComment[]>(`/api/posts/${postId}/comments`)).map(mapPostComment)
+  },
+
+  async comment(postId: string, content: string) {
+    return mapPostComment(await apiRequest<BackendPostComment>(`/api/posts/${postId}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    }))
+  },
+
+  async share(postId: string, content: string) {
+    return apiRequest<BackendPostShare>(`/api/posts/${postId}/shares`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    })
   },
 }
 
@@ -305,6 +559,151 @@ export const uploadApi = {
       method: "POST",
       body: formData,
     })
+  },
+
+  async video(file: File) {
+    const formData = new FormData()
+    formData.append("file", file)
+
+    return apiRequest<UploadedImage>("/api/uploads/videos", {
+      method: "POST",
+      body: formData,
+    })
+  },
+}
+
+export const friendApi = {
+  async list() {
+    return apiRequest<Friendship[]>("/api/friends")
+  },
+
+  async incomingRequests() {
+    return apiRequest<Friendship[]>("/api/friends/requests/incoming")
+  },
+
+  async outgoingRequests() {
+    return apiRequest<Friendship[]>("/api/friends/requests/outgoing")
+  },
+
+  async search(query: string, page = 0, size = 20) {
+    const params = new URLSearchParams({
+      query,
+      page: String(page),
+      size: String(size),
+    })
+    return apiRequest<PagedResponse<FriendUser>>(`/api/friends/search?${params.toString()}`)
+  },
+
+  async sendRequest(userId: string) {
+    return apiRequest<Friendship>(`/api/friends/requests/${userId}`, {
+      method: "POST",
+    })
+  },
+
+  async acceptRequest(requestId: string) {
+    return apiRequest<Friendship>(`/api/friends/requests/${requestId}/accept`, {
+      method: "POST",
+    })
+  },
+
+  async deleteRequest(requestId: string) {
+    return apiRequest<void>(`/api/friends/requests/${requestId}`, {
+      method: "DELETE",
+    })
+  },
+
+  async removeFriend(friendshipId: string) {
+    return apiRequest<void>(`/api/friends/${friendshipId}`, {
+      method: "DELETE",
+    })
+  },
+}
+
+export const messageApi = {
+  async conversations() {
+    return apiRequest<MessageConversation[]>("/api/messages/conversations")
+  },
+
+  async getOrCreateConversation(friendId: string) {
+    return apiRequest<MessageConversation>(`/api/messages/conversations/friends/${friendId}`, {
+      method: "POST",
+    })
+  },
+
+  async messages(conversationId: string, page = 0, size = 50) {
+    return apiRequest<PagedResponse<BackendMessage>>(`/api/messages/conversations/${conversationId}/messages?page=${page}&size=${size}`)
+  },
+
+  async sendMessage(conversationId: string, payload: {
+    messageType: MessageType
+    content?: string
+    mediaUrl?: string
+    linkUrl?: string
+  }) {
+    return apiRequest<BackendMessage>(`/api/messages/conversations/${conversationId}/messages`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
+  },
+
+  async react(messageId: string, emoji: string) {
+    return apiRequest<MessageReaction>(`/api/messages/${messageId}/reactions`, {
+      method: "POST",
+      body: JSON.stringify({ emoji }),
+    })
+  },
+
+  async deleteReaction(messageId: string) {
+    return apiRequest<void>(`/api/messages/${messageId}/reactions`, {
+      method: "DELETE",
+    })
+  },
+}
+
+export const storyApi = {
+  async list(page = 0, size = 20) {
+    return apiRequest<PagedResponse<BackendStory>>(`/api/stories?page=${page}&size=${size}`)
+  },
+
+  async create(payload: StoryCreatePayload) {
+    return apiRequest<BackendStory>("/api/stories", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
+  },
+
+  async markViewed(id: string) {
+    return apiRequest<BackendStory>(`/api/stories/${id}/views`, {
+      method: "POST",
+    })
+  },
+
+  async react(id: string, reactionType: string) {
+    return apiRequest(`/api/stories/${id}/reactions`, {
+      method: "POST",
+      body: JSON.stringify({ reactionType }),
+    })
+  },
+
+  async deleteReaction(id: string) {
+    return apiRequest<void>(`/api/stories/${id}/reactions`, {
+      method: "DELETE",
+    })
+  },
+
+  async delete(id: string) {
+    return apiRequest<void>(`/api/stories/${id}`, {
+      method: "DELETE",
+    })
+  },
+}
+
+export const musicTrackApi = {
+  async list(query?: string) {
+    const params = new URLSearchParams()
+    if (query?.trim()) params.set("query", query.trim())
+    const suffix = params.toString() ? `?${params.toString()}` : ""
+    return apiRequest<BackendMusicTrack[]>(`/api/music-tracks${suffix}`)
   },
 }
 

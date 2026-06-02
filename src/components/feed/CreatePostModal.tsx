@@ -6,6 +6,7 @@ import EmojiPicker, { Theme } from "emoji-picker-react"
 import { useThemeStore } from "@/store/useThemeStore"
 import { Button } from "@/components/ui/Button"
 import { postApi, uploadApi } from "@/lib/api"
+import { useTranslation } from "react-i18next"
 
 interface CreatePostModalProps {
   isOpen: boolean
@@ -23,6 +24,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isDarkMode = useThemeStore((state) => state.isDarkMode)
+  const { t } = useTranslation()
 
   const onEmojiClick = (emojiObject: any) => {
     setContent((prev) => prev + emojiObject.emoji)
@@ -66,12 +68,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
 
   const handlePost = async () => {
     if (!content.trim() && !media) {
-      setSubmitError("Vui long nhap noi dung hoac chon anh.")
-      return
-    }
-
-    if (media?.type === "video") {
-      setSubmitError("Backend hien chi ho tro upload anh.")
+      setSubmitError("Vui long nhap noi dung hoac chon anh/video.")
       return
     }
 
@@ -81,7 +78,12 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
     // Keep the existing AI scanning UX unchanged; submit after the scan finishes.
     window.setTimeout(async () => {
       try {
-        const mediaUrls = media ? [(await uploadApi.image(media.file)).url] : []
+        const uploadedMedia = media
+          ? media.type === "video"
+            ? await uploadApi.video(media.file)
+            : await uploadApi.image(media.file)
+          : null
+        const mediaUrls = uploadedMedia ? [uploadedMedia.url] : []
         await postApi.create(content.trim(), "PUBLIC", mediaUrls)
         window.dispatchEvent(new CustomEvent("cybersocial:post-created"))
         setContent("")
@@ -145,7 +147,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
               <div className="flex items-center justify-center p-4 border-b border-border">
                 <h2 className="text-lg font-bold tracking-wider text-foreground flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-accent-pink shadow-[var(--shadow-neon-pink)] animate-pulse" />
-                  Tạo bài viết
+                  {t("post.createPost.title")}
                 </h2>
               </div>
 
@@ -158,7 +160,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                       ref={textareaRef}
                       value={content}
                       onChange={handleContentChange}
-                      placeholder="Bạn muốn chia sẻ điều gì lên mạng lưới?"
+                      placeholder={t("post.createPost.contentPlaceholder")}
                       className="w-full bg-transparent text-foreground placeholder-text-secondary resize-none outline-none text-lg font-sans py-2"
                       rows={media ? 1 : 10}
                       style={{ minHeight: media ? '0.4rem' : '16rem' }}
@@ -195,7 +197,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-accent-blue/10 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]" />
                     <div className="w-5 h-5 border-2 border-accent-blue border-t-transparent rounded-full animate-spin relative z-10" />
                     <span className="text-accent-blue text-sm font-mono font-bold tracking-wide relative z-10">
-                      AI ĐANG PHÂN TÍCH VÀ MÃ HÓA DỮ LIỆU...
+                      {t("post.createPost.analyzing")}
                     </span>
                   </motion.div>
                 )}
@@ -219,17 +221,17 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                   />
                   <button
                     onClick={() => { fileInputRef.current?.setAttribute('accept', 'image/*'); fileInputRef.current?.click() }}
-                    className="p-2 text-accent-blue hover:bg-accent-blue/10 rounded-lg transition-colors group relative" title="Thêm ảnh"
+                    className="p-2 text-accent-blue hover:bg-accent-blue/10 rounded-lg transition-colors group relative" title={t("post.createPost.addImage")}
                   >
                     <Image className="w-5 h-5 group-hover:scale-110 transition-transform" />
                   </button>
                   <button
                     onClick={() => { fileInputRef.current?.setAttribute('accept', 'video/*'); fileInputRef.current?.click() }}
-                    className="p-2 text-accent-pink hover:bg-accent-pink/10 rounded-lg transition-colors group relative" title="Thêm video"
+                    className="p-2 text-accent-pink hover:bg-accent-pink/10 rounded-lg transition-colors group relative" title={t("post.createPost.addVideo")}
                   >
                     <Video className="w-5 h-5 group-hover:scale-110 transition-transform" />
                   </button>
-                  <button className="p-2 text-muted hover:text-foreground hover:bg-panel-hover rounded-lg transition-colors group relative" title="Đính kèm link">
+                  <button className="p-2 text-muted hover:text-foreground hover:bg-panel-hover rounded-lg transition-colors group relative" title={t("post.createPost.attachLink")}>
                     <LinkIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
                   </button>
                   <div className="relative flex items-center">
@@ -242,7 +244,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                     {showEmojiPicker && (
                       <div className="absolute bottom-12 left-0 z-50 shadow-[var(--shadow-neon-blue)] rounded-lg overflow-hidden border border-border bg-panel">
                         <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-                          <span className="text-xs font-bold text-muted tracking-wider">CHỌN EMOJI</span>
+                          <span className="text-xs font-bold text-muted tracking-wider">{t("post.createPost.emojiLabel")}</span>
                           <button
                             onClick={() => setShowEmojiPicker(false)}
                             className="text-muted hover:text-accent-pink transition-colors"
@@ -260,7 +262,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                       </div>
                     )}
                   </div>
-                  <button className="p-2 text-yellow-400 hover:bg-yellow-400/10 rounded-lg transition-colors group relative" title="Thêm tag">
+                  <button className="p-2 text-yellow-400 hover:bg-yellow-400/10 rounded-lg transition-colors group relative" title={t("post.createPost.addTag")}>
                     <Hash className="w-5 h-5 group-hover:scale-110 transition-transform" />
                   </button>
                 </div>
@@ -269,7 +271,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                     className="flex items-center gap-2 px-6 font-bold text-red-500 hover:bg-red-500/10"
                     onClick={handleCancel}
                   >
-                    Hủy
+                    {t("post.createPost.cancel")}
                   </Button>
 
                   <Button
@@ -281,12 +283,12 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                     {isScanning ? (
                       <>
                         <ShieldCheck className="w-4 h-4" />
-                        XÁC THỰC
+                        {t("post.createPost.verify")}
                       </>
                     ) : (
                       <>
                         <Send className="w-4 h-4" />
-                        PHÁT SÓNG
+                        {t("post.createPost.post")}
                       </>
                     )}
                   </Button>
@@ -314,14 +316,14 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                   <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mb-4 border border-red-500/50">
                     <X className="w-6 h-6 text-red-500" />
                   </div>
-                  <h3 className="text-xl font-bold text-foreground mb-2">Hủy bài viết?</h3>
-                  <p className="text-muted mb-6">Bạn có chắc chắn muốn hủy bài viết này không? Nội dung bạn đang viết sẽ bị xóa.</p>
+                  <h3 className="text-xl font-bold text-foreground mb-2">{t("post.createPost.cancelPost")}</h3>
+                  <p className="text-muted mb-6">{t("post.createPost.confirmCancel")}</p>
                   <div className="flex gap-4 w-full">
                     <Button
                       className="flex-1 bg-panel hover:bg-panel-hover text-foreground border border-border"
                       onClick={() => setShowCancelConfirm(false)}
                     >
-                      Hủy
+                      {t("post.createPost.cancel")}
                     </Button>
                     <Button
                       className="flex-1 bg-red-500 hover:bg-red-600 text-white"

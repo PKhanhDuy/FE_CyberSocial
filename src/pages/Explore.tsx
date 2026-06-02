@@ -6,12 +6,14 @@ import { PostCard } from "@/components/feed/PostCard"
 import type { Post } from "@/mocks/types"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
 import { postApi } from "@/lib/api"
+import { useTranslation } from "react-i18next"
 
 const TRENDING_TAGS = [
   "#Lõi_Lượng_Tử", "#AI_Vi_Phạm", "#CyberSec", "#NeuralNet", "#Deepfake_Alert", "#NeonCity"
 ]
 
 export function Explore() {
+  const { t } = useTranslation()
   const [searchQuery, setSearchQuery] = useState("")
   const [activeFilter, setActiveFilter] = useState("all")
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
@@ -27,7 +29,7 @@ export function Explore() {
         const response = await postApi.list()
         setPosts(response.content)
       } catch (error) {
-        setError(error instanceof Error ? error.message : "Khong tai duoc du lieu")
+        setError(error instanceof Error ? error.message : t("explore.noData"))
         setPosts(MOCK_POSTS)
       } finally {
         setIsLoading(false)
@@ -59,7 +61,7 @@ export function Explore() {
       <div className="sticky top-0 bg-background/ backdrop-blur-md z-20 pt-4 pb-4 border-b border-border">
         <div className="flex items-center gap-2 mb-4">
           <Globe className="w-6 h-6 text-accent-blue" />
-          <h1 className="text-2xl font-bold tracking-wider text-foreground neon-text-blue uppercase">Hệ Thống Quét Toần Cầu</h1>
+          <h1 className="text-2xl font-bold tracking-wider text-foreground neon-text-blue uppercase">{t("explore.title")}</h1>
         </div>
 
         <div className="relative group">
@@ -69,7 +71,7 @@ export function Explore() {
           <input
             type="text"
             className="block w-full pl-10 pr-3 py-3 border border-border rounded-xl leading-5 bg-panel/ text-muted placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-accent-blue focus:border-accent-blue transition-all sm:text-sm focus:shadow-[var(--shadow-neon-blue)]"
-            placeholder="Nhập ID chuỗi, mã định danh hoặc từ khóa..."
+            placeholder={t("explore.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -123,10 +125,10 @@ export function Explore() {
           <div className="flex-1">
             <h2 className="text-lg font-bold text-foreground mb-2 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-accent-blue" />
-              TRẠNG THÁI MẠNG LƯỚI
+              {t("explore.networkStatus")}
             </h2>
             <p className="text-muted text-sm mb-4">
-              Hệ thống đang quét 4,291,042 node dữ liệu toàn cầu. Phát hiện 12 điểm bất thường cục bộ. Độ trễ trung bình: 14ms.
+              {t("explore.description")}
             </p>
             <div className="flex flex-wrap gap-2">
               <div className="px-3 py-1 rounded-md bg-green-500/10 border border-green-500/30 text-green-400 text-xs font-mono font-bold">
@@ -148,7 +150,7 @@ export function Explore() {
       <div>
         <div className="flex items-center gap-2 mb-3">
           <Hash className="w-5 h-5 text-accent-pink" />
-          <h2 className="text-lg font-bold text-foreground tracking-wide">TỪ KHÓA THỊNH HÀNH</h2>
+          <h2 className="text-lg font-bold text-foreground tracking-wide">{t("explore.trendingKeys")}</h2>
         </div>
         <div className="flex gap-3 overflow-x-auto pb-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {TRENDING_TAGS.map((tag) => (
@@ -168,7 +170,7 @@ export function Explore() {
           onClick={() => setActiveFilter('all')}
           className={`pb-2 text-sm font-bold tracking-wider uppercase transition-colors relative ${activeFilter === 'all' ? 'text-accent-blue' : 'text-muted hover:text-muted'}`}
         >
-          Tất cả
+          {t("explore.all")}
           {activeFilter === 'all' && (
             <motion.div layoutId="explore-filter" className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-blue shadow-[var(--shadow-neon-blue)]" />
           )}
@@ -177,7 +179,7 @@ export function Explore() {
           onClick={() => setActiveFilter('suspicious')}
           className={`pb-2 text-sm font-bold tracking-wider uppercase transition-colors relative ${activeFilter === 'suspicious' ? 'text-accent-pink' : 'text-muted hover:text-muted'}`}
         >
-          Cảnh báo rủi ro
+          {t("explore.suspicious")}
           {activeFilter === 'suspicious' && (
             <motion.div layoutId="explore-filter" className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-pink shadow-[var(--shadow-neon-pink)]" />
           )}
@@ -188,7 +190,7 @@ export function Explore() {
       <div className="space-y-6">
         {isLoading && (
           <div className="text-center py-10 text-muted font-mono">
-            Dang dong bo du lieu...
+            {t("explore.asyncData")}
           </div>
         )}
 
@@ -207,7 +209,7 @@ export function Explore() {
         ))}
         {!isLoading && filteredPosts.length === 0 && (
           <div className="text-center py-10 text-muted font-mono">
-            Không tìm thấy dữ liệu khớp với bộ lọc...
+            {t("explore.noDataFeed")}
           </div>
         )}
       </div>

@@ -1,32 +1,35 @@
 import { useEffect, useRef, useState } from "react"
-import { ShieldCheck, Network, Activity, Settings, MapPin, Link as LinkIcon, Edit2, UserCircle, Heart, Briefcase, GraduationCap, Globe, Languages, Cake, Camera } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import { ShieldCheck, Network, Activity, Settings, MapPin, Link as LinkIcon, Edit2, UserCircle, Heart, Briefcase, GraduationCap, Globe, Languages, Cake, Camera, HelpCircle, Moon, Sun, LogOut, ChevronLeft, ChevronRight, KeyRound, Check, Images, Music2, Plus, Play, Trash2, X } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { PostCard } from "@/components/feed/PostCard"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
 import type { Post } from "@/mocks/types"
 import { Progress } from "@/components/ui/Progress"
 import { postApi, uploadApi } from "@/lib/api"
+import { createStoryHighlight, loadStoryHighlights, removeStoryFromHighlight, removeStoryHighlight, STORY_HIGHLIGHTS_EVENT, type StoryHighlight } from "@/lib/storyHighlights"
 import { useAuthStore } from "@/store/useAuthStore"
+import { useThemeStore } from "@/store/useThemeStore"
+import { useLanguageStore } from "@/store/useLanguageStore"
 
-const TABS = [
-  { id: "activity", label: "Hoạt động", icon: Activity },
-  { id: "about", label: "Giới thiệu", icon: UserCircle },
-  { id: "network", label: "Mạng lưới", icon: Network },
-  { id: "diagnostics", label: "Chuẩn đoán", icon: ShieldCheck },
-]
+type SettingsMenuView = "main" | "privacy" | "language"
 
-const ABOUT_SIDEBAR = [
-  { id: "overview", label: "Tổng quan" },
-  { id: "work_education", label: "Công việc & Học vấn" },
-  { id: "contact_basic", label: "Thông tin liên hệ & Cơ bản" },
-  { id: "details", label: "Chi tiết về bạn" }
-]
+const DEFAULT_HIGHLIGHT_MUSIC_DURATION_MS = 20_000
+const DEFAULT_HIGHLIGHT_IMAGE_DURATION_MS = 20_000
 
 export function Profile() {
+  const navigate = useNavigate()
+  const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState("activity")
   const [aboutTab, setAboutTab] = useState("overview")
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
+  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false)
+  const [settingsMenuView, setSettingsMenuView] = useState<SettingsMenuView>("main")
   const currentUser = useAuthStore((state) => state.user)
+  const logout = useAuthStore((state) => state.logout)
+  const { isDarkMode, toggleTheme } = useThemeStore()
+  const { language, setLanguage } = useLanguageStore()
   const updateDisplayName = useAuthStore((state) => state.updateDisplayName)
   const updateAvatar = useAuthStore((state) => state.updateAvatar)
   const updateCover = useAuthStore((state) => state.updateCover)
@@ -34,9 +37,34 @@ export function Profile() {
   const [userPosts, setUserPosts] = useState<Post[]>([])
   const [postsError, setPostsError] = useState<string | null>(null)
   const [profileError, setProfileError] = useState<string | null>(null)
+  const [storyHighlights, setStoryHighlights] = useState<StoryHighlight[]>([])
+  const [isCreatingHighlight, setIsCreatingHighlight] = useState(false)
+  const [newHighlightTitle, setNewHighlightTitle] = useState("")
+  const [selectedHighlightId, setSelectedHighlightId] = useState<string | null>(null)
+  const [selectedHighlightItemIndex, setSelectedHighlightItemIndex] = useState(0)
+  const [highlightItemProgress, setHighlightItemProgress] = useState(0)
+  const [highlightMusicError, setHighlightMusicError] = useState<string | null>(null)
+  const [pendingDeleteHighlightId, setPendingDeleteHighlightId] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
+  const settingsMenuRef = useRef<HTMLDivElement>(null)
+  const highlightAudioRef = useRef<HTMLAudioElement>(null)
+  const highlightVideoRef = useRef<HTMLVideoElement>(null)
+
+  const TABS = [
+    { id: "activity", label: t("profile.activity"), icon: Activity },
+    { id: "about", label: t("profile.introduction"), icon: UserCircle },
+    { id: "network", label: t("profile.network"), icon: Network },
+    { id: "diagnostics", label: t("profile.predictions"), icon: ShieldCheck },
+  ]
+
+  const ABOUT_SIDEBAR = [
+    { id: "overview", label: t("profile.introductions.overview") },
+    { id: "work_education", label: t("profile.introductions.education") },
+    { id: "contact_basic", label: t("profile.introductions.contact") },
+    { id: "details", label: t("profile.introductions.details") }
+  ]
 
   const [userProfile, setUserProfile] = useState<any>({
     cover: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=1600",
@@ -56,11 +84,49 @@ export function Profile() {
   }, [refreshCurrentUser])
 
   useEffect(() => {
+    const loadHighlights = () => {
+      setStoryHighlights(loadStoryHighlights(currentUser?.id))
+    }
+
+    loadHighlights()
+    window.addEventListener(STORY_HIGHLIGHTS_EVENT, loadHighlights)
+    return () => window.removeEventListener(STORY_HIGHLIGHTS_EVENT, loadHighlights)
+  }, [currentUser?.id])
+
+  useEffect(() => {
+    if (!isSettingsMenuOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (settingsMenuRef.current?.contains(event.target as Node)) return
+      setIsSettingsMenuOpen(false)
+      setSettingsMenuView("main")
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsSettingsMenuOpen(false)
+        setSettingsMenuView("main")
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown)
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [isSettingsMenuOpen])
+
+  useEffect(() => {
     const loadUserPosts = async () => {
       setPostsError(null)
       try {
-        const response = await postApi.list()
-        setUserPosts(response.content.filter((post) => post.author.id === currentUser?.id))
+        if (!currentUser?.id) {
+          setUserPosts([])
+          return
+        }
+        const response = await postApi.byAuthor(currentUser.id)
+        setUserPosts(response.content)
       } catch (error) {
         setPostsError(error instanceof Error ? error.message : "Khong tai duoc bai viet")
       }
@@ -141,6 +207,149 @@ export function Profile() {
     setEditingField(null)
   }
 
+  const handleLogout = async () => {
+    setIsSettingsMenuOpen(false)
+    setSettingsMenuView("main")
+    await logout()
+    navigate("/login", { replace: true })
+  }
+
+  const getSettingsMenuTransform = () => {
+    if (settingsMenuView === "privacy") return "translateX(-33.3333%)"
+    if (settingsMenuView === "language") return "translateX(-66.6667%)"
+    return "translateX(0)"
+  }
+
+  const handleLanguageChange = (nextLanguage: "vi" | "en") => {
+    setLanguage(nextLanguage)
+    setIsSettingsMenuOpen(false)
+    setSettingsMenuView("main")
+  }
+
+  const handleCreateHighlightGroup = () => {
+    setStoryHighlights(createStoryHighlight(currentUser?.id, newHighlightTitle || "Tin nổi bật"))
+    setNewHighlightTitle("")
+    setIsCreatingHighlight(false)
+  }
+
+  const selectedHighlight = storyHighlights.find((highlight) => highlight.id === selectedHighlightId)
+  const selectedHighlightItem = selectedHighlight?.items[selectedHighlightItemIndex]
+
+  useEffect(() => {
+    const audio = highlightAudioRef.current
+    if (!audio) return
+
+    audio.pause()
+    audio.currentTime = 0
+    setHighlightMusicError(null)
+
+    if (!selectedHighlightItem?.music?.audioUrl) return
+
+    audio.src = selectedHighlightItem.music.audioUrl
+    audio.currentTime = (selectedHighlightItem.musicStartMs ?? 0) / 1000
+    const timeoutId = window.setTimeout(() => {
+      audio.pause()
+    }, selectedHighlightItem.musicDurationMs ?? DEFAULT_HIGHLIGHT_MUSIC_DURATION_MS)
+
+    audio.play().catch(() => {
+      setHighlightMusicError("Không phát được nhạc của tin này")
+    })
+
+    return () => {
+      window.clearTimeout(timeoutId)
+      audio.pause()
+      audio.currentTime = 0
+    }
+  }, [selectedHighlightItem?.id, selectedHighlightItem?.music?.audioUrl, selectedHighlightItem?.musicStartMs, selectedHighlightItem?.musicDurationMs])
+
+  const openHighlightViewer = (highlight: StoryHighlight) => {
+    if (highlight.items.length === 0) {
+      setIsCreatingHighlight(true)
+      return
+    }
+
+    setSelectedHighlightId(highlight.id)
+    setSelectedHighlightItemIndex(0)
+  }
+
+  const closeHighlightViewer = () => {
+    highlightAudioRef.current?.pause()
+    highlightVideoRef.current?.pause()
+    setSelectedHighlightId(null)
+    setSelectedHighlightItemIndex(0)
+    setHighlightItemProgress(0)
+  }
+
+  const showPreviousHighlightItem = () => {
+    if (!selectedHighlight) return
+    setSelectedHighlightItemIndex((currentIndex) => (
+      currentIndex === 0 ? selectedHighlight.items.length - 1 : currentIndex - 1
+    ))
+  }
+
+  const showNextHighlightItem = () => {
+    if (!selectedHighlight) return
+    if (selectedHighlightItemIndex >= selectedHighlight.items.length - 1) {
+      closeHighlightViewer()
+      return
+    }
+
+    setSelectedHighlightItemIndex((currentIndex) => Math.min(currentIndex + 1, selectedHighlight.items.length - 1))
+  }
+
+  const removeCurrentHighlightItem = () => {
+    if (!selectedHighlight || !selectedHighlightItem) return
+
+    const nextHighlights = removeStoryFromHighlight(currentUser?.id, selectedHighlight.id, selectedHighlightItem.id)
+    const updatedHighlight = nextHighlights.find((highlight) => highlight.id === selectedHighlight.id)
+    setStoryHighlights(nextHighlights)
+
+    if (!updatedHighlight || updatedHighlight.items.length === 0) {
+      closeHighlightViewer()
+      return
+    }
+
+    setSelectedHighlightItemIndex((currentIndex) => (
+      Math.min(currentIndex, updatedHighlight.items.length - 1)
+    ))
+    setHighlightItemProgress(0)
+  }
+
+  const removeHighlightGroup = (highlightId: string) => {
+    const nextHighlights = removeStoryHighlight(currentUser?.id, highlightId)
+    setStoryHighlights(nextHighlights)
+    setPendingDeleteHighlightId(null)
+
+    if (selectedHighlightId === highlightId) {
+      closeHighlightViewer()
+    }
+  }
+
+  const updateHighlightVideoProgress = () => {
+    const video = highlightVideoRef.current
+    if (!video || !Number.isFinite(video.duration) || video.duration === 0) return
+    setHighlightItemProgress(Math.min(100, (video.currentTime / video.duration) * 100))
+  }
+
+  useEffect(() => {
+    setHighlightItemProgress(0)
+    if (!selectedHighlightItem || selectedHighlightItem.mediaType === "video") return
+
+    const durationMs = selectedHighlightItem.musicDurationMs ?? DEFAULT_HIGHLIGHT_IMAGE_DURATION_MS
+    const startedAt = Date.now()
+    const intervalId = window.setInterval(() => {
+      setHighlightItemProgress(Math.min(100, ((Date.now() - startedAt) / durationMs) * 100))
+    }, 100)
+    const timeoutId = window.setTimeout(() => {
+      showNextHighlightItem()
+    }, durationMs)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.clearTimeout(timeoutId)
+    }
+  }, [selectedHighlightItem?.id, selectedHighlightItem?.mediaType, selectedHighlightItem?.musicDurationMs])
+
   const renderField = (field: string, label: string, icon: React.ReactNode, type: string = "text", options?: string[]) => {
     const isEditing = editingField === field;
     const rawValue = userProfile[field];
@@ -161,7 +370,7 @@ export function Profile() {
                   onChange={(e) => setEditValue(e.target.value)}
                   className="w-full bg-background border border-accent-blue rounded-lg px-3 py-2 text-foreground outline-none focus:shadow-[var(--shadow-neon-blue)] transition-shadow"
                 >
-                  <option value="">Chọn {label.toLowerCase()}</option>
+                  <option value="">{label.toLowerCase()}</option>
                   {options.map(opt => (
                     <option key={opt} value={opt}>{opt}</option>
                   ))}
@@ -183,8 +392,8 @@ export function Profile() {
                 />
               )}
               <div className="flex gap-2 mt-2">
-                <button onClick={() => saveEdit(field)} className="px-4 py-1.5 bg-accent-blue text-black hover:bg-white rounded text-sm font-bold transition-colors shadow-[var(--shadow-neon-blue)]">LƯU</button>
-                <button onClick={cancelEdit} className="px-4 py-1.5 bg-[#2a2a40] text-muted hover:bg-red-500/20 hover:text-red-500 rounded text-sm font-bold transition-colors">HỦY</button>
+                <button onClick={() => saveEdit(field)} className="px-4 py-1.5 bg-accent-blue text-black hover:bg-white rounded text-sm font-bold transition-colors shadow-[var(--shadow-neon-blue)]">{t("profile.settings.save")}</button>
+                <button onClick={cancelEdit} className="px-4 py-1.5 bg-[#2a2a40] text-muted hover:bg-red-500/20 hover:text-red-500 rounded text-sm font-bold transition-colors">{t("profile.settings.cancel")}</button>
               </div>
             </div>
           ) : (
@@ -195,11 +404,11 @@ export function Profile() {
                   onClick={() => startEdit(field, rawValue)}
                   className="text-muted hover:text-accent-blue opacity-0 group-hover:opacity-100 transition-all flex items-center gap-1 text-xs bg-background px-2 py-1 rounded border border-border hover:border-accent-blue"
                 >
-                  <Edit2 className="w-3 h-3" /> Chỉnh sửa
+                  <Edit2 className="w-3 h-3" /> {t("profile.settings.modify")}
                 </button>
               </div>
               <div className="text-foreground mt-1 font-medium leading-relaxed">
-                {displayValue || <span className="text-muted italic font-normal">Chưa có thông tin</span>}
+                {displayValue || <span className="text-muted italic font-normal">{t("profile.introductions.overviewContent.noInfo")}</span>}
               </div>
             </div>
           )}
@@ -274,24 +483,154 @@ export function Profile() {
               />
             </div>
 
-            <button
-              onClick={() => {
-                setActiveTab("about");
-                setAboutTab("overview");
-                setTimeout(() => {
-                  const tabs = document.getElementById("profile-tabs");
-                  if (tabs) {
-                    // Scroll to tabs with a small offset for smooth UX
-                    const y = tabs.getBoundingClientRect().top + window.scrollY - 20;
-                    window.scrollTo({ top: y, behavior: 'smooth' });
-                  }
-                }, 100);
-              }}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-panel border border-border hover:bg-panel-hover hover:border-accent-blue/50 transition-colors text-sm font-medium text-foreground shadow-lg group"
-            >
-              <Edit2 className="w-4 h-4 group-hover:text-accent-blue transition-colors" />
-              Chỉnh sửa hồ sơ
-            </button>
+            <div className="relative flex items-center gap-2" ref={settingsMenuRef}>
+              <button
+                onClick={() => {
+                  setActiveTab("about");
+                  setAboutTab("overview");
+                  setTimeout(() => {
+                    const tabs = document.getElementById("profile-tabs");
+                    if (tabs) {
+                      // Scroll to tabs with a small offset for smooth UX
+                      const y = tabs.getBoundingClientRect().top + window.scrollY - 20;
+                      window.scrollTo({ top: y, behavior: 'smooth' });
+                    }
+                  }, 100);
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-panel border border-border hover:bg-panel-hover hover:border-accent-blue/50 transition-colors text-sm font-medium text-foreground shadow-lg group"
+              >
+                <Edit2 className="w-4 h-4 group-hover:text-accent-blue transition-colors" />
+                {t("profile.editProfile")}
+              </button>
+
+              <button
+                type="button"
+                aria-label={t("profile.settings.menuLabel")}
+                aria-expanded={isSettingsMenuOpen}
+                onClick={() => {
+                  setSettingsMenuView("main")
+                  setIsSettingsMenuOpen((isOpen) => !isOpen)
+                }}
+                className={cn(
+                  "h-10 w-10 flex items-center justify-center rounded-lg bg-panel border border-border hover:bg-panel-hover hover:border-accent-blue/50 transition-colors text-muted hover:text-accent-blue shadow-lg",
+                  isSettingsMenuOpen && "border-accent-blue/60 text-accent-blue bg-accent-blue/10"
+                )}
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+
+              {isSettingsMenuOpen && (
+                <div
+                  className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-border shadow-2xl z-50 overflow-hidden"
+                  style={{ backgroundColor: isDarkMode ? "#12181a" : "#ffffff" }}
+                >
+                  <div
+                    className="flex w-[300%] transition-transform duration-300 ease-out"
+                    style={{ transform: getSettingsMenuTransform() }}
+                  >
+                    <div className="w-1/3 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setSettingsMenuView("privacy")}
+                        className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                      >
+                        <Settings className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
+                        <span className="font-medium">{t("profile.settings.title")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                      >
+                        <HelpCircle className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
+                        <span className="font-medium">{t("profile.settings.help")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={toggleTheme}
+                        className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                      >
+                        {isDarkMode ? <Sun className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" /> : <Moon className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />}
+                        <span className="font-medium">{isDarkMode ? t("profile.settings.lightMode") : t("profile.settings.darkMode")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-danger hover:bg-danger/10 transition-colors border-t border-border cursor-pointer"
+                      >
+                        <LogOut className="w-5 h-5 group-hover:scale-105 transition-transform" />
+                        <span className="font-medium">{t("profile.settings.logout")}</span>
+                      </button>
+                    </div>
+
+                    <div className="w-1/3 shrink-0">
+                      <div className="flex items-center gap-2 border-b border-border px-2 py-2">
+                        <button
+                          type="button"
+                          aria-label={t("common.back")}
+                          onClick={() => setSettingsMenuView("main")}
+                          className="h-8 w-8 flex items-center justify-center rounded-lg text-muted hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                        >
+                          <ChevronLeft className="w-5 h-5" />
+                        </button>
+                        <span className="text-sm font-bold text-foreground">{t("profile.settings.title")}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSettingsMenuOpen(false)
+                          setSettingsMenuView("main")
+                          navigate("/change-password")
+                        }}
+                        className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                      >
+                        <KeyRound className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
+                        <span className="font-medium">{t("profile.settings.changePassword")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSettingsMenuView("language")}
+                        className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                      >
+                        <Languages className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
+                        <span className="font-medium">{t("profile.settings.language")}</span>
+                      </button>
+                    </div>
+
+                    <div className="w-1/3 shrink-0">
+                      <div className="flex items-center gap-2 border-b border-border px-2 py-2">
+                        <button
+                          type="button"
+                          aria-label={t("common.back")}
+                          onClick={() => setSettingsMenuView("privacy")}
+                          className="h-8 w-8 flex items-center justify-center rounded-lg text-muted hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                        >
+                          <ChevronLeft className="w-5 h-5" />
+                        </button>
+                        <span className="text-sm font-bold text-foreground">{t("profile.settings.languageTitle")}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleLanguageChange("vi")}
+                        className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                      >
+                        <Languages className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
+                        <span className="font-medium flex-1">{t("profile.settings.vietnamese")}</span>
+                        {language === "vi" && <Check className="w-4 h-4 text-accent-blue" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleLanguageChange("en")}
+                        className="group w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-panel-hover hover:text-accent-blue transition-colors cursor-pointer"
+                      >
+                        <Languages className="w-5 h-5 text-accent-blue group-hover:scale-105 transition-transform" />
+                        <span className="font-medium flex-1">{t("profile.settings.english")}</span>
+                        {language === "en" && <Check className="w-4 h-4 text-accent-blue" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -300,7 +639,7 @@ export function Profile() {
                 {userProfile.username}
                 {userProfile.isVerified && (
                   <span className="text-xs bg-accent-blue/10 text-accent-blue border border-accent-blue/30 px-2 py-0.5 rounded uppercase tracking-widest font-mono">
-                    Đã Xác Thực
+                    {t("profile.verified")}
                   </span>
                 )}
               </h1>
@@ -343,15 +682,11 @@ export function Profile() {
             <div className="flex gap-8 pt-4 border-t border-border">
               <div>
                 <div className="text-xl font-bold text-foreground tracking-wider">8,492</div>
-                <div className="text-xs text-muted uppercase tracking-widest">Node mạng</div>
-              </div>
-              <div>
-                <div className="text-xl font-bold text-foreground tracking-wider">1.2M</div>
-                <div className="text-xs text-muted uppercase tracking-widest">Lưu lượng dữ liệu</div>
+                <div className="text-xs text-muted uppercase tracking-widest">{t("profile.postsCount")}</div>
               </div>
               <div>
                 <div className="text-xl font-bold text-accent-blue tracking-wider">{userProfile.trustScore}%</div>
-                <div className="text-xs text-muted uppercase tracking-widest">Chỉ số tin cậy</div>
+                <div className="text-xs text-muted uppercase tracking-widest">{t("profile.trustRate")}</div>
               </div>
             </div>
           </div>
@@ -363,6 +698,133 @@ export function Profile() {
           {profileError}
         </div>
       )}
+
+      <section className="glass-panel border border-border rounded-xl p-4 sm:p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Images className="h-5 w-5 text-accent-blue" />
+            <h2 className="text-lg font-bold text-foreground">{t("profile.highlightStory")}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsCreatingHighlight((current) => !current)}
+            className="h-10 rounded-lg border border-border bg-panel px-3 text-sm font-bold text-foreground hover:border-accent-blue/50 hover:bg-panel-hover transition-colors flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4 text-accent-blue" />
+            {t("profile.createGroup")}
+          </button>
+        </div>
+
+        {isCreatingHighlight && (
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+            <input
+              value={newHighlightTitle}
+              onChange={(event) => setNewHighlightTitle(event.target.value)}
+              placeholder={t("profile.createGroupPlaceholder")}
+              className="h-11 flex-1 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-accent-blue"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleCreateHighlightGroup}
+                className="h-11 rounded-lg bg-accent-blue px-4 text-sm font-bold text-black hover:bg-white transition-colors"
+              >
+                {t("profile.save")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCreatingHighlight(false)
+                  setNewHighlightTitle("")
+                }}
+                className="h-11 rounded-lg border border-border bg-panel px-4 text-sm font-bold text-muted hover:bg-panel-hover hover:text-foreground transition-colors"
+              >
+                {t("profile.cancel")}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-3 overflow-x-auto pb-1 hide-scrollbar">
+          {storyHighlights.map((highlight) => {
+            const coverItem = highlight.items[0]
+            return (
+              <div
+                key={highlight.id}
+                className="group relative w-28 shrink-0 text-center"
+              >
+                <button
+                  type="button"
+                  onClick={() => openHighlightViewer(highlight)}
+                  className="w-full rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue"
+                  title={highlight.title}
+                >
+                  <div className="relative h-36 overflow-hidden rounded-lg border border-border bg-panel-hover">
+                    {highlight.coverUrl ? (
+                      <img src={highlight.coverUrl} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center text-muted">
+                        <Images className="h-8 w-8" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/75" />
+                    {coverItem?.mediaType === "video" && (
+                      <div className="absolute right-2 top-2 h-8 w-8 rounded-full bg-black/55 text-white backdrop-blur flex items-center justify-center">
+                        <Play className="h-4 w-4 fill-current" />
+                      </div>
+                    )}
+                    <div className="absolute bottom-2 left-2 rounded-full bg-black/65 px-2 py-1 text-xs font-bold text-white backdrop-blur">
+                      + {Math.max(highlight.items.length, 0)}
+                    </div>
+                  </div>
+                  <div className="mt-2 truncate text-sm font-bold text-foreground">{highlight.title}</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingDeleteHighlightId(highlight.id)}
+                  aria-label="Xóa nhóm tin nổi bật"
+                  title={t("profile.deleteGroup")}
+                  className="absolute right-1.5 top-1.5 h-6 w-6 rounded-full border border-white/20 bg-black/65 text-white/75 opacity-0 shadow-lg backdrop-blur transition-all hover:border-red-300/60 hover:bg-red-500/25 hover:text-white focus:opacity-100 group-hover:opacity-100 flex items-center justify-center"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+                {pendingDeleteHighlightId === highlight.id && (
+                  <div className="absolute right-0 top-8 z-30 w-28 rounded-lg border border-red-400/40 bg-black/90 p-2 text-white shadow-2xl backdrop-blur">
+                    <div className="mb-2 text-center text-xs font-bold">{t("profile.deleteGroup")}?</div>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => removeHighlightGroup(highlight.id)}
+                        className="h-7 flex-1 rounded-md bg-red-500/90 text-[11px] font-bold text-white hover:bg-red-400 transition-colors"
+                      >
+                        {t("profile.delete")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingDeleteHighlightId(null)}
+                        className="h-7 flex-1 rounded-md bg-white/10 text-[11px] font-bold text-white/80 hover:bg-white/20 hover:text-white transition-colors"
+                      >
+                        {t("profile.cancel")}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          <button
+            type="button"
+            onClick={() => setIsCreatingHighlight(true)}
+            className="w-28 shrink-0 rounded-lg border border-dashed border-border bg-panel/50 p-3 text-center text-muted hover:border-accent-blue/60 hover:text-accent-blue transition-colors"
+          >
+            <div className="mx-auto mb-2 h-11 w-11 rounded-full bg-accent-blue/15 text-accent-blue flex items-center justify-center">
+              <Plus className="h-5 w-5" />
+            </div>
+            <span className="text-sm font-bold">{t("profile.newGroup")}</span>
+          </button>
+        </div>
+      </section>
 
       {/* Navigation Tabs */}
       <div id="profile-tabs" className="flex gap-2 border-b border-border sticky top-0 bg-background/ backdrop-blur-md z-10 pt-2 overflow-x-auto hide-scrollbar">
@@ -428,38 +890,38 @@ export function Profile() {
             <div className="flex-1 glass-panel border border-border rounded-xl p-2 sm:p-6 min-h-[400px]">
               {aboutTab === "overview" && (
                 <div className="space-y-2 animate-in fade-in duration-300">
-                  <h3 className="text-xl font-bold text-foreground mb-4 border-b border-border pb-2 px-4">Tổng quan</h3>
-                  {renderField("job", "Công việc", <Briefcase className="w-5 h-5" />)}
-                  {renderField("school", "Trường học", <GraduationCap className="w-5 h-5" />)}
-                  {renderField("hometown", "Nơi sống hiện tại", <MapPin className="w-5 h-5" />)}
-                  {renderField("maritalStatus", "Tình trạng", <Heart className="w-5 h-5" />, "text", ["Độc thân", "Đang hẹn hò", "Đã kết hôn", "Phức tạp"])}
+                  <h3 className="text-xl font-bold text-foreground mb-4 border-b border-border pb-2 px-4">{t("profile.introductions.overview")}</h3>
+                  {renderField("job", t("profile.introductions.overviewContent.work"), <Briefcase className="w-5 h-5" />)}
+                  {renderField("school", t("profile.introductions.overviewContent.school"), <GraduationCap className="w-5 h-5" />)}
+                  {renderField("hometown", t("profile.introductions.overviewContent.location"), <MapPin className="w-5 h-5" />)}
+                  {renderField("maritalStatus", t("profile.introductions.overviewContent.status"), <Heart className="w-5 h-5" />, "text", Object.values(t("profile.introductions.overviewContent.statusOptions", { returnObjects: true })))}
                 </div>
               )}
 
               {aboutTab === "work_education" && (
                 <div className="space-y-2 animate-in fade-in duration-300">
-                  <h3 className="text-xl font-bold text-foreground mb-4 border-b border-border pb-2 px-4">Công việc & Học vấn</h3>
-                  {renderField("job", "Công việc hiện tại", <Briefcase className="w-5 h-5" />)}
-                  {renderField("educationLevel", "Trình độ học vấn", <GraduationCap className="w-5 h-5" />, "text", ["Trung học", "Cử nhân", "Thạc sĩ", "Tiến sĩ", "Giáo sư"])}
-                  {renderField("school", "Trường học / Viện nghiên cứu", <GraduationCap className="w-5 h-5" />)}
+                  <h3 className="text-xl font-bold text-foreground mb-4 border-b border-border pb-2 px-4">{t("profile.introductions.education")}</h3>
+                  {renderField("job", t("profile.introductions.educationContent.job"), <Briefcase className="w-5 h-5" />)}
+                  {renderField("educationLevel", t("profile.introductions.educationContent.educationLevel"), <GraduationCap className="w-5 h-5" />, "text", Object.values(t("profile.introductions.educationContent.levelOptions", { returnObjects: true })))}
+                  {renderField("school", t("profile.introductions.educationContent.school"), <GraduationCap className="w-5 h-5" />)}
                 </div>
               )}
 
               {aboutTab === "contact_basic" && (
                 <div className="space-y-2 animate-in fade-in duration-300">
-                  <h3 className="text-xl font-bold text-foreground mb-4 border-b border-border pb-2 px-4">Thông tin liên hệ & Cơ bản</h3>
-                  {renderField("gender", "Giới tính", <UserCircle className="w-5 h-5" />, "text", ["Nam", "Nữ", "Khác"])}
-                  {renderField("birthday", "Ngày sinh", <Cake className="w-5 h-5" />, "date")}
-                  {renderField("language", "Ngôn ngữ", <Languages className="w-5 h-5" />)}
-                  {renderField("nationality", "Quốc tịch", <Globe className="w-5 h-5" />)}
+                  <h3 className="text-xl font-bold text-foreground mb-4 border-b border-border pb-2 px-4">{t("profile.introductions.contact")}</h3>
+                  {renderField("gender", t("profile.introductions.contactContent.gender"), <UserCircle className="w-5 h-5" />, "text", Object.values(t("profile.introductions.contactContent.genderOptions", { returnObjects: true })))}
+                  {renderField("birthday", t("profile.introductions.contactContent.birthday"), <Cake className="w-5 h-5" />, "date")}
+                  {renderField("language", t("profile.introductions.contactContent.language"), <Languages className="w-5 h-5" />)}
+                  {renderField("nationality", t("profile.introductions.contactContent.nationlity"), <Globe className="w-5 h-5" />)}
                 </div>
               )}
 
               {aboutTab === "details" && (
                 <div className="space-y-2 animate-in fade-in duration-300">
-                  <h3 className="text-xl font-bold text-foreground mb-4 border-b border-border pb-2 px-4">Chi tiết về bạn</h3>
-                  {renderField("bio", "Tiểu sử (Mô tả bản thân)", <UserCircle className="w-5 h-5" />, "textarea")}
-                  {renderField("hobbies", "Sở thích (Ngăn cách bằng dấu phẩy)", <Heart className="w-5 h-5" />)}
+                  <h3 className="text-xl font-bold text-foreground mb-4 border-b border-border pb-2 px-4">{t("profile.introductions.details")}</h3>
+                  {renderField("bio", t("profile.introductions.detailsContent.bio"), <UserCircle className="w-5 h-5" />, "textarea")}
+                  {renderField("hobbies", t("profile.introductions.detailsContent.favorite"), <Heart className="w-5 h-5" />)}
                 </div>
               )}
             </div>
@@ -469,9 +931,9 @@ export function Profile() {
         {activeTab === "network" && (
           <div className="glass-panel border border-border p-8 flex flex-col items-center justify-center text-center rounded-xl h-64">
             <Network className="w-12 h-12 text-accent-blue mb-4 opacity-50" />
-            <h3 className="text-lg font-bold tracking-widest text-foreground mb-2">MA TRẬN MẠNG LƯỚI THẦN KINH</h3>
+            <h3 className="text-lg font-bold tracking-widest text-foreground mb-2">{t("profile.networkContent.title")}</h3>
             <p className="text-muted max-w-md">
-              Hình ảnh hóa các kết nối node và đường truyền dữ liệu hiện đang đồng bộ hóa với lõi trung tâm.
+              {t("profile.networkContent.description")}
             </p>
           </div>
         )}
@@ -482,7 +944,7 @@ export function Profile() {
             <div className="bg-panel border border-border rounded-xl p-6 space-y-6">
               <div className="flex items-center gap-2 border-b border-border pb-4">
                 <Settings className="w-5 h-5 text-accent-blue" />
-                <h3 className="font-bold tracking-wider text-foreground">TÍNH TOÀN VẸN HỆ THỐNG</h3>
+                <h3 className="font-bold tracking-wider text-foreground">{t("profile.predictionsContent.systemIntegrity")}</h3>
               </div>
 
               <div className="space-y-4">
@@ -514,7 +976,7 @@ export function Profile() {
             <div className="bg-panel border border-border rounded-xl p-6">
               <div className="flex items-center gap-2 border-b border-border pb-4 mb-6">
                 <ShieldCheck className="w-5 h-5 text-accent-blue" />
-                <h3 className="font-bold tracking-wider text-foreground">GIAO THỨC TRUY CẬP</h3>
+                <h3 className="font-bold tracking-wider text-foreground">{t("profile.predictionsContent.accessProtocol")}</h3>
               </div>
 
               <div className="space-y-3">
@@ -537,6 +999,136 @@ export function Profile() {
 
       {selectedPost && (
         <AIAnalysisModal post={selectedPost} onClose={() => setSelectedPost(null)} />
+      )}
+
+      {selectedHighlight && selectedHighlightItem && (
+        <div className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+          <audio
+            ref={highlightAudioRef}
+            preload="metadata"
+            className="hidden"
+            onError={() => setHighlightMusicError("Không phát được nhạc của tin này")}
+          />
+
+          {selectedHighlight.items.length > 1 && (
+            <button
+              type="button"
+              onClick={showPreviousHighlightItem}
+              aria-label="Tin nổi bật trước"
+              className="fixed left-4 sm:left-[calc(50%-270px)] top-1/2 z-[10000] h-12 w-12 -translate-y-1/2 rounded-full border border-white/30 bg-black/80 text-white shadow-lg backdrop-blur hover:bg-white/20 transition-colors flex items-center justify-center"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+          )}
+
+          <div className="relative w-full max-w-[360px]">
+            <div className="absolute -right-2 -top-14 z-[10000] flex items-center gap-2 sm:-right-14 sm:top-0 sm:flex-col">
+              <button
+                type="button"
+                onClick={closeHighlightViewer}
+                aria-label="Đóng tin nổi bật"
+                title="Đóng"
+                className="h-11 w-11 rounded-full border border-white/30 bg-black/80 text-white shadow-lg backdrop-blur hover:bg-white/20 transition-colors flex items-center justify-center"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={removeCurrentHighlightItem}
+                aria-label="Xóa tin khỏi nhóm nổi bật"
+                title="Xóa khỏi nhóm"
+                className="h-11 w-11 rounded-full border border-red-400/50 bg-black/80 text-red-200 shadow-lg backdrop-blur hover:bg-red-500/20 hover:text-white transition-colors flex items-center justify-center"
+              >
+                <Trash2 className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="relative h-[82vh] max-h-[760px] w-full overflow-hidden rounded-xl border border-white/15 bg-black shadow-2xl">
+              {selectedHighlightItem.mediaType === "video" ? (
+                <video
+                  ref={highlightVideoRef}
+                  src={selectedHighlightItem.mediaUrl}
+                  autoPlay
+                  controls
+                  playsInline
+                  onLoadedMetadata={updateHighlightVideoProgress}
+                  onTimeUpdate={updateHighlightVideoProgress}
+                  onEnded={showNextHighlightItem}
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <img src={selectedHighlightItem.mediaUrl} alt="" className="h-full w-full object-cover" />
+              )}
+
+              <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/80 to-transparent p-4">
+                <div className="mb-4 flex gap-1">
+                  {selectedHighlight.items.map((item, index) => (
+                    <div key={item.id} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
+                      <div
+                        className="h-full rounded-full bg-white transition-[width] duration-150"
+                        style={{
+                          width: index < selectedHighlightItemIndex
+                            ? "100%"
+                            : index === selectedHighlightItemIndex
+                              ? `${highlightItemProgress}%`
+                              : "0%",
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <img
+                    src={userProfile.avatar}
+                    alt={userProfile.username}
+                    className="h-10 w-10 rounded-full border border-white/40 object-cover"
+                  />
+                  <div className="min-w-0">
+                    <div className="truncate font-bold text-white">{selectedHighlight.title}</div>
+                    <div className="truncate text-xs font-mono text-white/65">
+                      {selectedHighlightItemIndex + 1}/{selectedHighlight.items.length} tin
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {(selectedHighlightItem.caption || selectedHighlightItem.createdAt || selectedHighlightItem.music || highlightMusicError) && (
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-5">
+                  {selectedHighlightItem.music && (
+                    <div className="mb-3 inline-flex max-w-full items-center gap-2 rounded-full border border-white/20 bg-black/55 px-3 py-2 text-white backdrop-blur">
+                      <Music2 className="w-4 h-4 text-accent-pink shrink-0" />
+                      <span className="text-xs font-bold truncate">{selectedHighlightItem.music.title}</span>
+                      <span className="text-xs text-white/60 truncate">- {selectedHighlightItem.music.artist}</span>
+                    </div>
+                  )}
+                  {highlightMusicError && selectedHighlightItem.music && (
+                    <div className="mb-3 rounded-lg border border-white/20 bg-black/70 px-3 py-2 text-xs text-white/80 backdrop-blur">
+                      {highlightMusicError}
+                    </div>
+                  )}
+                  {selectedHighlightItem.caption && (
+                    <p className="text-sm leading-relaxed text-white">{selectedHighlightItem.caption}</p>
+                  )}
+                  {selectedHighlightItem.createdAt && (
+                    <div className="mt-2 text-xs font-mono text-white/60">{selectedHighlightItem.createdAt}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {selectedHighlight.items.length > 1 && (
+            <button
+              type="button"
+              onClick={showNextHighlightItem}
+              aria-label="Tin nổi bật tiếp theo"
+              className="fixed right-4 sm:right-[calc(50%-270px)] top-1/2 z-[10000] h-12 w-12 -translate-y-1/2 rounded-full border border-white/30 bg-black/80 text-white shadow-lg backdrop-blur hover:bg-white/20 transition-colors flex items-center justify-center"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </button>
+          )}
+        </div>
       )}
     </div>
   )
