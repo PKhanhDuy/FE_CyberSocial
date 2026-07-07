@@ -8,6 +8,7 @@ import { createMessageSocket, friendApi, messageApi, uploadApi, type BackendMess
 import { useAuthStore } from "@/store/useAuthStore"
 import { useThemeStore } from "@/store/useThemeStore"
 import { useTranslation } from "react-i18next"
+import { optimizeCloudinaryImage } from "@/lib/media"
 
 const WAVE_EMOJI = "\uD83D\uDC4B"
 const reactionEmojis = ["\u2764\uFE0F", "\uD83D\uDE02", "\uD83D\uDE2E", "\uD83D\uDE22", "\uD83D\uDC4D", WAVE_EMOJI]
@@ -323,7 +324,15 @@ export function Messages() {
 
   const renderMessageContent = (message: BackendMessage) => {
     if (message.messageType === "IMAGE" && message.mediaUrl) {
-      return <img src={message.mediaUrl} alt="" className="max-h-64 rounded-lg object-cover" />
+      return (
+        <img
+          src={optimizeCloudinaryImage(message.mediaUrl, 800)}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="max-h-64 rounded-lg object-cover"
+        />
+      )
     }
     if (message.messageType === "VIDEO" && message.mediaUrl) {
       return <video src={message.mediaUrl} controls className="max-h-64 rounded-lg bg-black" />
@@ -423,7 +432,7 @@ export function Messages() {
             </div>
           )}
 
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4">
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-4">
             {isOpeningConversation && (
               <div className="flex justify-center py-8 text-muted">
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -445,7 +454,7 @@ export function Messages() {
             {messages.map((message) => {
               const isOwn = message.sender.id === currentUser?.id
               return (
-                <div key={message.id} className={cn("group flex pb-7", isOwn ? "justify-end" : "justify-start")}>
+                <div key={message.id} className={cn("group relative flex", isOwn ? "justify-end" : "justify-start")}>
                   <div className={cn("relative flex max-w-[78%] flex-col", isOwn && "items-end")}>
                     <div className={cn(
                       "rounded-2xl px-4 py-2 text-sm leading-relaxed shadow-md ring-1",
@@ -466,7 +475,7 @@ export function Messages() {
                     )}
                     <div
                       className={cn(
-                        "pointer-events-none absolute top-full z-10 mt-1 flex w-max gap-1 rounded-full border border-border bg-background/95 px-2 py-1 opacity-0 shadow-lg backdrop-blur transition-opacity group-hover:pointer-events-auto group-hover:opacity-100",
+                        "pointer-events-none absolute top-full z-20 mt-1 flex w-max gap-1 rounded-full border border-border bg-background/95 px-2 py-1 opacity-0 shadow-lg backdrop-blur transition-opacity group-hover:pointer-events-auto group-hover:opacity-100",
                         isOwn ? "right-0" : "left-0"
                       )}
                     >
