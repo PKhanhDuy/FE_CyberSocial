@@ -10,6 +10,7 @@ import { musicTrackApi, storyApi, uploadApi, type BackendMusicTrack, type Backen
 import { addStoryToHighlight, createStoryHighlight, loadStoryHighlights, STORY_HIGHLIGHTS_EVENT, type StoryHighlight } from "@/lib/storyHighlights"
 import type { User } from "@/mocks/types"
 import { useTranslation } from "react-i18next"
+import { optimizeCloudinaryImage } from "@/lib/media"
 type StoryMediaType = "image" | "video"
 
 interface MusicTrack {
@@ -620,7 +621,7 @@ export function StoriesTray() {
           className="snap-start shrink-0 w-32 sm:w-33 h-52 rounded-lg overflow-hidden border border-border bg-panel relative group text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue"
         >
           <div className="h-45 bg-panel-hover overflow-hidden -mt-16">
-            <img src={storyOwner.avatar} alt="" className="h-full w-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-300" />
+            <img src={optimizeCloudinaryImage(storyOwner.avatar, 320)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-300" />
           </div>
           <div className="absolute top-24 left-1/2 -translate-x-1/2 h-11 w-11 rounded-full bg-background border-4 border-panel flex items-center justify-center">
             <div className="h-8 w-8 rounded-full bg-accent-blue text-black flex items-center justify-center shadow-[var(--shadow-neon-blue)]">
@@ -647,7 +648,7 @@ export function StoriesTray() {
             {story.mediaType === "video" ? (
               <video src={story.mediaUrl} muted playsInline className="absolute inset-0 h-full w-full object-cover group-hover:scale-105 transition-transform duration-300" />
             ) : (
-              <img src={story.mediaUrl} alt="" className="absolute inset-0 h-full w-full object-cover group-hover:scale-105 transition-transform duration-300" />
+              <img src={optimizeCloudinaryImage(story.mediaUrl, 400)} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover group-hover:scale-105 transition-transform duration-300" />
             )}
             <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-black/10 to-black/80" />
             {(story.isPublishing || story.publishError) && (
@@ -729,7 +730,7 @@ export function StoriesTray() {
                       <video src={draftMedia.url} controls className="max-h-[72vh] w-full object-contain" />
                     ) : draftMedia ? (
                       <>
-                        <img src={draftMedia.url} alt="" className="max-h-[72vh] w-full object-contain" />
+                        <img src={draftMedia.url} alt="" decoding="async" className="max-h-[72vh] w-full object-contain" />
                         {selectedMusic && (
                           <div className="absolute left-5 right-5 bottom-5 rounded-full border border-white/20 bg-black/65 px-4 py-3 text-white backdrop-blur flex items-center gap-3">
                             <div className="h-9 w-9 rounded-full bg-accent-pink/20 text-accent-pink flex items-center justify-center">
@@ -976,7 +977,7 @@ export function StoriesTray() {
                       className="h-full w-full object-contain cursor-pointer"
                     />
                   ) : (
-                    <img src={selectedStory.mediaUrl} alt="" className="h-full w-full object-cover" />
+                    <img src={optimizeCloudinaryImage(selectedStory.mediaUrl, 1200)} alt="" decoding="async" className="h-full w-full object-cover" />
                   )}
                   <div className="absolute inset-x-0 top-0 p-4 bg-gradient-to-b from-black/75 to-transparent">
                     <div className="h-1 rounded-full bg-white/25 overflow-hidden mb-4">
@@ -1058,7 +1059,7 @@ export function StoriesTray() {
                                   >
                                     <div className="h-10 w-10 overflow-hidden rounded-lg bg-white/10 shrink-0">
                                       {highlight.coverUrl ? (
-                                        <img src={highlight.coverUrl} alt="" className="h-full w-full object-cover" />
+                                        <img src={optimizeCloudinaryImage(highlight.coverUrl, 160)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                                       ) : (
                                         <div className="h-full w-full flex items-center justify-center text-white/45">
                                           <Plus className="h-4 w-4" />

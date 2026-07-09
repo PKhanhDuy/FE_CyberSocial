@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import EmojiPicker, { Theme } from "emoji-picker-react"
 import { ArrowLeft, Hand, ImagePlus, Link as LinkIcon, Loader2, MessageCircle, Send, Smile, Video } from "lucide-react"
 import { Avatar } from "@/components/ui/Avatar"
 import { Button } from "@/components/ui/Button"
 import { cn } from "@/lib/utils"
-import { friendApi, messageApi, uploadApi, type BackendMessage, type FriendUser, type Friendship, type MessageConversation, type MessageReaction, type MessageType } from "@/lib/api"
+import { createMessageSocket, friendApi, messageApi, uploadApi, type BackendMessage, type FriendUser, type Friendship, type MessageConversation, type MessageReaction, type MessageSocketEvent, type MessageType } from "@/lib/api"
 import { useAuthStore } from "@/store/useAuthStore"
 import { useThemeStore } from "@/store/useThemeStore"
 import { useTranslation } from "react-i18next"
+import { optimizeCloudinaryImage } from "@/lib/media"
 
 const WAVE_EMOJI = "\uD83D\uDC4B"
 const reactionEmojis = ["\u2764\uFE0F", "\uD83D\uDE02", "\uD83D\uDE2E", "\uD83D\uDE22", "\uD83D\uDC4D", WAVE_EMOJI]
@@ -49,6 +50,8 @@ export function Messages() {
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const selectedConversationIdRef = useRef<string | null>(null)
+  const conversationIdsRef = useRef<Set<string>>(new Set())
 
   const conversationByFriendId = useMemo(() => {
     return new Map(conversations.map((conversation) => [conversation.friend.id, conversation]))
@@ -62,7 +65,7 @@ export function Messages() {
     })
   }, [conversationByFriendId, friends])
 
-  const loadInitialData = async () => {
+  const loadInitialData = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     try {
@@ -73,19 +76,35 @@ export function Messages() {
       setFriends(friendData)
       setConversations(conversationData)
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Khong tai duoc tin nhan")
+      setError(loadError instanceof Error ? loadError.message : t("message.failedLoadData"))
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     loadInitialData()
-  }, [])
+  }, [loadInitialData])
+
+  useEffect(() => {
+    selectedConversationIdRef.current = selectedConversation?.id ?? null
+  }, [selectedConversation?.id])
+
+  useEffect(() => {
+    conversationIdsRef.current = new Set(conversations.map((conversation) => conversation.id))
+  }, [conversations])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages.length, selectedConversation?.id])
+
+  const refreshConversations = useCallback(async () => {
+    try {
+      setConversations(await messageApi.conversations())
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : t("message.failedRefresh"))
+    }
+  }, [])
 
   const openConversation = async (friend: FriendUser) => {
     setSelectedFriend(friend)
@@ -127,19 +146,119 @@ export function Messages() {
     )))
   }
 
+  const upsertMessage = useCallback((message: BackendMessage) => {
+    setMessages((current) => {
+      const exists = current.some((item) => item.id === message.id)
+      return exists
+        ? current.map((item) => item.id === message.id ? message : item)
+        : [...current, message]
+    })
+  }, [])
+
+  const upsertRealtimeMessage = useCallback((message: BackendMessage) => {
+    if (selectedConversationIdRef.current === message.conversationId) {
+      upsertMessage(message)
+    }
+
+    setConversations((current) => current.map((conversation) => (
+      conversation.id === message.conversationId
+        ? { ...conversation, latestMessage: message, updatedAt: message.createdAt }
+        : conversation
+    )))
+
+    if (!conversationIdsRef.current.has(message.conversationId)) {
+      void refreshConversations()
+    }
+  }, [refreshConversations, upsertMessage])
+
+  const updateRealtimeReaction = useCallback((event: MessageSocketEvent) => {
+    if (event.type !== "REACTION_UPDATED" || !event.reaction) return
+
+    const applyReaction = (message: BackendMessage) => {
+      if (message.id !== event.messageId) return message
+      const reactions = message.reactions.some((item) => item.userId === event.reaction.userId)
+        ? message.reactions.map((item) => item.userId === event.reaction.userId ? event.reaction : item)
+        : [...message.reactions, event.reaction]
+      return { ...message, reactions }
+    }
+
+    setMessages((current) => current.map(applyReaction))
+    setConversations((current) => current.map((conversation) => (
+      conversation.latestMessage?.id === event.messageId
+        ? { ...conversation, latestMessage: applyReaction(conversation.latestMessage) }
+        : conversation
+    )))
+  }, [])
+
+  const deleteRealtimeReaction = useCallback((event: MessageSocketEvent) => {
+    if (event.type !== "REACTION_DELETED") return
+
+    const removeReaction = (message: BackendMessage) => (
+      message.id === event.messageId
+        ? { ...message, reactions: message.reactions.filter((reaction) => reaction.userId !== event.userId) }
+        : message
+    )
+
+    setMessages((current) => current.map(removeReaction))
+    setConversations((current) => current.map((conversation) => (
+      conversation.latestMessage?.id === event.messageId
+        ? { ...conversation, latestMessage: removeReaction(conversation.latestMessage) }
+        : conversation
+    )))
+  }, [])
+
+  const handleRealtimeEvent = useCallback((event: MessageSocketEvent) => {
+    if (event.type === "MESSAGE_CREATED" && event.message) {
+      upsertRealtimeMessage(event.message)
+      return
+    }
+    if (event.type === "REACTION_UPDATED") {
+      updateRealtimeReaction(event)
+      return
+    }
+    if (event.type === "REACTION_DELETED") {
+      deleteRealtimeReaction(event)
+    }
+  }, [deleteRealtimeReaction, updateRealtimeReaction, upsertRealtimeMessage])
+
+  useEffect(() => {
+    let reconnectTimer: number | undefined
+    let socket: WebSocket | null = null
+    let disposed = false
+
+    const connect = () => {
+      socket = createMessageSocket(handleRealtimeEvent)
+      if (!socket) return
+
+      socket.addEventListener("close", () => {
+        if (!disposed) {
+          reconnectTimer = window.setTimeout(connect, 3000)
+        }
+      })
+    }
+
+    connect()
+
+    return () => {
+      disposed = true
+      if (reconnectTimer) window.clearTimeout(reconnectTimer)
+      socket?.close()
+    }
+  }, [currentUser?.id, handleRealtimeEvent])
+
   const sendMessage = async (payload: { messageType: MessageType; content?: string; mediaUrl?: string; linkUrl?: string }) => {
     if (!selectedConversation || isSending) return
     setIsSending(true)
     setError(null)
     try {
       const message = await messageApi.sendMessage(selectedConversation.id, payload)
-      setMessages((current) => [...current, message])
       updateLatestMessage(message)
+      upsertMessage(message)
       setDraft("")
       setDraftMode("TEXT")
       setIsEmojiOpen(false)
     } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : "Khong gui duoc tin nhan")
+      setError(sendError instanceof Error ? sendError.message : t("message.failedSendMessages"))
     } finally {
       setIsSending(false)
     }
@@ -179,10 +298,10 @@ export function Messages() {
         messageType: isVideo ? "VIDEO" : "IMAGE",
         mediaUrl: uploaded.url,
       })
-      setMessages((current) => [...current, message])
+      upsertMessage(message)
       updateLatestMessage(message)
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "Khong gui duoc tep")
+      setError(uploadError instanceof Error ? uploadError.message : t("message.failedSendFile"))
     } finally {
       setIsSending(false)
     }
@@ -199,13 +318,21 @@ export function Messages() {
         return { ...message, reactions }
       }))
     } catch (reactionError) {
-      setError(reactionError instanceof Error ? reactionError.message : "Khong tha duoc emoji")
+      setError(reactionError instanceof Error ? reactionError.message : t("message.failedSendEmoji"))
     }
   }
 
   const renderMessageContent = (message: BackendMessage) => {
     if (message.messageType === "IMAGE" && message.mediaUrl) {
-      return <img src={message.mediaUrl} alt="" className="max-h-64 rounded-lg object-cover" />
+      return (
+        <img
+          src={optimizeCloudinaryImage(message.mediaUrl, 800)}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="max-h-64 rounded-lg object-cover"
+        />
+      )
     }
     if (message.messageType === "VIDEO" && message.mediaUrl) {
       return <video src={message.mediaUrl} controls className="max-h-64 rounded-lg bg-black" />
@@ -222,13 +349,12 @@ export function Messages() {
 
   if (!selectedFriend) {
     return (
-      <div className="min-h-screen bg-background p-6 text-foreground">
-        <div>
+      <div className="space-y-5 py-4 text-foreground">
+        <div className="border-b border-border pb-4">
           <h1 className="text-2xl font-bold tracking-wider text-foreground flex items-center gap-3">
             <MessageCircle className="h-6 w-6 text-accent-blue" />
             {t("nav.messages")}
           </h1>
-          <p className="mt-2 text-sm text-muted">Chon mot nguoi ban de bat dau nhan tin.</p>
         </div>
 
         {error && (
@@ -237,18 +363,18 @@ export function Messages() {
           </div>
         )}
 
-        <section className="mt-5 overflow-hidden rounded-xl border border-border bg-panel/45">
+        <section className="overflow-hidden rounded-xl border border-border bg-panel/45">
           <div className="border-b border-border p-4">
-            <div className="text-sm font-bold uppercase tracking-wider text-muted">Danh sach ban be</div>
+            <div className="text-sm font-bold uppercase tracking-wider text-muted">{t("message.listFriend")}</div>
           </div>
-          <div className="max-h-[calc(100vh-10rem)] overflow-y-auto p-2">
+          <div className="max-h-[calc(100vh-14rem)] overflow-y-auto p-2">
             {isLoading && (
               <div className="flex items-center justify-center py-10 text-muted">
                 <Loader2 className="h-5 w-5 animate-spin" />
               </div>
             )}
             {!isLoading && sortedFriends.length === 0 && (
-              <div className="px-3 py-10 text-center text-sm text-muted">Chua co ban be de nhan tin.</div>
+              <div className="px-3 py-10 text-center text-sm text-muted">{t("message.noFriends")}</div>
             )}
             {sortedFriends.map((friendship) => {
               const friend = friendship.user
@@ -280,8 +406,8 @@ export function Messages() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-background p-4">
-      <section className="flex h-full min-h-0 overflow-hidden rounded-xl border border-border bg-background/60 shadow-xl">
+    <div className="py-4">
+      <section className="flex h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)] min-h-[32rem] overflow-hidden rounded-xl border border-border bg-background/60 shadow-xl">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="shrink-0 flex items-center gap-3 border-b border-border bg-background/95 p-4 backdrop-blur">
             <button
@@ -306,7 +432,7 @@ export function Messages() {
             </div>
           )}
 
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4">
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-4">
             {isOpeningConversation && (
               <div className="flex justify-center py-8 text-muted">
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -322,14 +448,14 @@ export function Messages() {
                 >
                   <Hand className="h-8 w-8" />
                 </button>
-                <div className="font-bold text-foreground">Hay bat dau cuoc tro chuyen</div>
+                <div className="font-bold text-foreground">{t("message.startChat")}</div>
               </div>
             )}
             {messages.map((message) => {
               const isOwn = message.sender.id === currentUser?.id
               return (
-                <div key={message.id} className={cn("group flex", isOwn ? "justify-end" : "justify-start")}>
-                  <div className={cn("max-w-[78%]", isOwn && "items-end")}>
+                <div key={message.id} className={cn("group relative flex", isOwn ? "justify-end" : "justify-start")}>
+                  <div className={cn("relative flex max-w-[78%] flex-col", isOwn && "items-end")}>
                     <div className={cn(
                       "rounded-2xl px-4 py-2 text-sm leading-relaxed shadow-md ring-1",
                       isOwn
@@ -347,13 +473,18 @@ export function Messages() {
                         ))}
                       </div>
                     )}
-                    <div className={cn("mt-1 hidden gap-1 group-hover:flex", isOwn ? "justify-end" : "justify-start")}>
+                    <div
+                      className={cn(
+                        "pointer-events-none absolute top-full z-20 mt-1 flex w-max gap-1 rounded-full border border-border bg-background/95 px-2 py-1 opacity-0 shadow-lg backdrop-blur transition-opacity group-hover:pointer-events-auto group-hover:opacity-100",
+                        isOwn ? "right-0" : "left-0"
+                      )}
+                    >
                       {reactionEmojis.map((emoji) => (
                         <button
                           key={emoji}
                           type="button"
                           onClick={() => reactToMessage(message.id, emoji)}
-                          className="rounded-full bg-panel px-1.5 py-0.5 text-xs hover:bg-panel-hover"
+                          className="rounded-full px-1.5 py-0.5 text-xs transition-colors hover:bg-panel-hover"
                         >
                           {emoji}
                         </button>
@@ -415,7 +546,7 @@ export function Messages() {
                     submitDraft()
                   }
                 }}
-                placeholder={draftMode === "LINK" ? "Dan lien ket..." : "Nhap tin nhan..."}
+                placeholder={draftMode === "LINK" ? t("message.linkPlaceholder") : t("message.inputPlaceholder")}
                 className="h-11 flex-1 rounded-lg border border-border bg-panel px-3 text-sm text-foreground outline-none focus:border-accent-blue"
               />
               <Button type="button" variant="neon-blue" className="gap-2" onClick={submitDraft} disabled={isSending || !draft.trim() || !selectedConversation}>

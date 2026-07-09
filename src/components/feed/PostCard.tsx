@@ -6,12 +6,13 @@ import { Avatar } from "@/components/ui/Avatar"
 import { Badge } from "@/components/ui/Badge"
 import { Progress } from "@/components/ui/Progress"
 import { Button } from "@/components/ui/Button"
-import { Activity, Heart, MessageSquare, Repeat2, Send, Share, ShieldAlert, ShieldCheck, X } from "lucide-react"
+import { Activity, FlaskConical, Heart, MessageSquare, Repeat2, Send, Share, ShieldAlert, ShieldCheck, X } from "lucide-react"
 import { AnimatePresence, motion } from "framer-motion"
 import { cn } from "@/lib/utils"
-import { postApi } from "@/lib/api"
+import { demoApi, postApi, type DemoPropagationPattern } from "@/lib/api"
 import { useAuthStore } from "@/store/useAuthStore"
 import { useTranslation } from "react-i18next"
+import { optimizeCloudinaryImage } from "@/lib/media"
 
 interface PostCardProps {
   post: Post
@@ -35,6 +36,8 @@ const isVideoMedia = (url: string) => {
   return normalizedUrl.includes("/video/upload/") || /\.(mp4|webm|mov|m4v|ogg)$/.test(normalizedUrl)
 }
 
+const COMMENT_PAGE_SIZE = 10
+
 function SharedPostPreview({ post }: { post: Post }) {
   return (
     <div className="mb-4 rounded-lg border border-border bg-panel/60 overflow-hidden">
@@ -53,7 +56,13 @@ function SharedPostPreview({ post }: { post: Post }) {
           {isVideoMedia(post.media) ? (
             <video src={post.media} controls className="w-full h-auto max-h-80 bg-black" />
           ) : (
-            <img src={post.media} alt="" className="w-full h-auto max-h-80 object-cover" />
+            <img
+              src={optimizeCloudinaryImage(post.media, 900)}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="w-full h-auto max-h-80 object-cover"
+            />
           )}
         </div>
       )}
@@ -71,6 +80,8 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
   const [isCommentsOpen, setIsCommentsOpen] = useState(false)
   const [hasLoadedComments, setHasLoadedComments] = useState(false)
   const [isLoadingComments, setIsLoadingComments] = useState(false)
+  const [commentPage, setCommentPage] = useState(0)
+  const [hasMoreComments, setHasMoreComments] = useState(false)
   const [isSubmittingComment, setIsSubmittingComment] = useState(false)
   const [commentDraft, setCommentDraft] = useState("")
   const [localComments, setLocalComments] = useState<LocalComment[]>([])
@@ -78,6 +89,17 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
   const [isSharing, setIsSharing] = useState(false)
   const [repostText, setRepostText] = useState("")
   const [actionError, setActionError] = useState<string | null>(null)
+  const [isDemoOpen, setIsDemoOpen] = useState(false)
+  const [isSimulatingDemo, setIsSimulatingDemo] = useState(false)
+  const [demoResult, setDemoResult] = useState<string | null>(null)
+  const [demoForm, setDemoForm] = useState({
+    demoUserCount: 50,
+    shares: 40,
+    likes: 80,
+    comments: 15,
+    durationSeconds: 60,
+    pattern: "VIRAL_BURST" as DemoPropagationPattern,
+  })
   const isSuspicious = post.aiState === "suspicious"
   const isVerified = post.aiState === "verified"
   const isMonitoring = post.aiState === "monitoring"
@@ -112,21 +134,40 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
     }
   }
 
-  const toggleComments = async () => {
-    const nextOpen = !isCommentsOpen
-    setIsCommentsOpen(nextOpen)
-    if (!nextOpen || hasLoadedComments || isLoadingComments) return
-
+  const loadCommentsPage = async (page: number) => {
+    if (isLoadingComments) return
     setIsLoadingComments(true)
     setActionError(null)
     try {
-      setLocalComments(await postApi.comments(post.id))
+      const response = await postApi.comments(post.id, page, COMMENT_PAGE_SIZE)
+      setLocalComments((comments) => {
+        if (page === 0) return response.content
+
+        const existingIds = new Set(comments.map((comment) => comment.id))
+        const nextComments = response.content.filter((comment) => !existingIds.has(comment.id))
+        return [...comments, ...nextComments]
+      })
+      setCommentPage(response.page)
+      setHasMoreComments(!response.last)
       setHasLoadedComments(true)
     } catch (error) {
       setActionError(error instanceof Error ? error.message : t("post.actions.actionError"))
     } finally {
       setIsLoadingComments(false)
     }
+  }
+
+  const toggleComments = async () => {
+    const nextOpen = !isCommentsOpen
+    setIsCommentsOpen(nextOpen)
+    if (!nextOpen || hasLoadedComments || isLoadingComments) return
+
+    await loadCommentsPage(0)
+  }
+
+  const loadMoreComments = () => {
+    if (!hasMoreComments || isLoadingComments) return
+    void loadCommentsPage(commentPage + 1)
   }
 
   const submitComment = async (event: FormEvent<HTMLFormElement>) => {
@@ -156,25 +197,50 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
     setIsSharing(true)
     setActionError(null)
     try {
-      const share = await postApi.share(post.id, repostText.trim())
+      const repost = await postApi.share(post.id, repostText.trim())
       setShareCount((count) => count + 1)
       setRepostText("")
       setIsRepostOpen(false)
-      onRepostCreated({
-        id: share.id,
-        author: currentUser,
-        content: share.content ?? "",
-        timestamp: t("post.actions.justNow"),
-        likes: 0,
-        comments: 0,
-        shares: 0,
-        aiState: "monitoring",
-        sharedPost: post,
-      })
+      onRepostCreated(repost)
     } catch (error) {
       setActionError(error instanceof Error ? error.message : t("post.actions.actionError"))
     } finally {
       setIsSharing(false)
+    }
+  }
+
+  const updateDemoNumber = (key: "demoUserCount" | "shares" | "likes" | "comments" | "durationSeconds", value: string) => {
+    const parsedValue = Number.parseInt(value, 10)
+    setDemoForm((current) => ({
+      ...current,
+      [key]: Number.isNaN(parsedValue) ? 0 : parsedValue,
+    }))
+  }
+
+  const submitPropagationDemo = async () => {
+    if (isSimulatingDemo) return
+
+    setIsSimulatingDemo(true)
+    setActionError(null)
+    setDemoResult(null)
+    try {
+      const result = await demoApi.simulatePropagation({
+        postId: post.id,
+        ...demoForm,
+      })
+      setLikeCount(result.totalLikes)
+      setCommentCount(result.totalComments)
+      setShareCount(result.totalShares)
+      setLocalComments([])
+      setHasLoadedComments(false)
+      setCommentPage(0)
+      setHasMoreComments(result.totalComments > 0)
+      setDemoResult(`Created ${result.sharesCreated} shares, ${result.likesCreated} likes, ${result.commentsCreated} comments.`)
+      window.dispatchEvent(new Event("cybersocial:post-created"))
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Could not run propagation demo.")
+    } finally {
+      setIsSimulatingDemo(false)
     }
   }
 
@@ -206,11 +272,22 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
                 t("post.isMonitoring")}
           </span>
         </div>
-        {isMonitoring && (
-          <div className="flex items-center gap-2 w-32">
-            <Progress value={Math.random() * 100} indicatorColor="bg-accent-blue" className="h-1.5" />
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {isMonitoring && (
+            <div className="hidden sm:flex items-center gap-2 w-32">
+              <Progress value={Math.random() * 100} indicatorColor="bg-accent-blue" className="h-1.5" />
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsDemoOpen(true)}
+            className="inline-flex h-8 items-center gap-2 rounded-lg border border-accent-blue/40 bg-accent-blue/10 px-3 text-xs font-bold text-accent-blue transition-colors hover:bg-accent-blue/20"
+            title="Demo propagation"
+          >
+            <FlaskConical className="h-4 w-4" />
+            Demo
+          </button>
+        </div>
       </div>
 
       <div className="p-5">
@@ -258,7 +335,13 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
             {isVideoMedia(post.media) ? (
               <video src={post.media} controls className="w-full h-auto max-h-96 bg-black" />
             ) : (
-              <img src={post.media} alt="Post media" className="w-full h-auto object-cover max-h-96" />
+              <img
+                src={optimizeCloudinaryImage(post.media, 1200)}
+                alt="Post media"
+                loading="lazy"
+                decoding="async"
+                className="w-full h-auto object-cover max-h-96"
+              />
             )}
             {isSuspicious && (
               <div className="absolute inset-0 bg-accent-pink/10 pointer-events-none flex items-center justify-center">
@@ -373,6 +456,16 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
                     </div>
                   </div>
                 ))}
+                {hasMoreComments && (
+                  <button
+                    type="button"
+                    onClick={loadMoreComments}
+                    disabled={isLoadingComments}
+                    className="w-full rounded-lg border border-border bg-panel/60 px-3 py-2 text-sm font-semibold text-accent-blue transition-colors hover:bg-panel-hover disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isLoadingComments ? t("post.actions.loadingComments") : "Xem them binh luan"}
+                  </button>
+                )}
                 <form onSubmit={submitComment} className="flex items-center gap-2 pt-1">
                   <Avatar src={currentUser?.avatar ?? post.author.avatar} fallback={(currentUser?.username ?? post.author.username)[0]} className="h-8 w-8" />
                   <input
@@ -445,6 +538,131 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
                   <Button type="button" variant="neon-blue" className="gap-2" onClick={submitRepost} disabled={!canInteract || isSharing}>
                     <Repeat2 className="h-4 w-4" />
                     {isSharing ? `${t("post.actions.repostSubmit")}...` : t("post.actions.repostSubmit")}
+                  </Button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+
+      {typeof document !== "undefined" && createPortal(
+        <AnimatePresence>
+          {isDemoOpen && (
+            <motion.div
+              className="fixed inset-0 z-[10000] flex items-center justify-center bg-background/85 p-4 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 16, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.96 }}
+                className="glass-panel w-full max-w-lg overflow-hidden rounded-xl border border-border shadow-[var(--shadow-neon-blue)]"
+              >
+                <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                  <h2 className="text-base font-bold text-foreground">Propagation demo</h2>
+                  <button
+                    type="button"
+                    onClick={() => setIsDemoOpen(false)}
+                    aria-label={t("common.cancel")}
+                    className="h-9 w-9 rounded-full text-muted hover:bg-panel-hover hover:text-foreground flex items-center justify-center transition-colors"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-4 p-4">
+                  <div>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted">Pattern</label>
+                    <select
+                      value={demoForm.pattern}
+                      onChange={(event) => setDemoForm((current) => ({
+                        ...current,
+                        pattern: event.target.value as DemoPropagationPattern,
+                      }))}
+                      className="h-11 w-full rounded-lg border border-border bg-panel px-3 text-sm text-foreground outline-none focus:border-accent-blue"
+                    >
+                      <option value="VIRAL_BURST">Viral burst</option>
+                      <option value="COORDINATED">Coordinated</option>
+                      <option value="ORGANIC">Organic</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="block">
+                      <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted">Demo users</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={300}
+                        value={demoForm.demoUserCount}
+                        onChange={(event) => updateDemoNumber("demoUserCount", event.target.value)}
+                        className="h-11 w-full rounded-lg border border-border bg-panel px-3 text-sm text-foreground outline-none focus:border-accent-blue"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted">Duration</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={3600}
+                        value={demoForm.durationSeconds}
+                        onChange={(event) => updateDemoNumber("durationSeconds", event.target.value)}
+                        className="h-11 w-full rounded-lg border border-border bg-panel px-3 text-sm text-foreground outline-none focus:border-accent-blue"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted">Shares</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={300}
+                        value={demoForm.shares}
+                        onChange={(event) => updateDemoNumber("shares", event.target.value)}
+                        className="h-11 w-full rounded-lg border border-border bg-panel px-3 text-sm text-foreground outline-none focus:border-accent-blue"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted">Likes</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={300}
+                        value={demoForm.likes}
+                        onChange={(event) => updateDemoNumber("likes", event.target.value)}
+                        className="h-11 w-full rounded-lg border border-border bg-panel px-3 text-sm text-foreground outline-none focus:border-accent-blue"
+                      />
+                    </label>
+                    <label className="col-span-2 block">
+                      <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted">Comments</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={300}
+                        value={demoForm.comments}
+                        onChange={(event) => updateDemoNumber("comments", event.target.value)}
+                        className="h-11 w-full rounded-lg border border-border bg-panel px-3 text-sm text-foreground outline-none focus:border-accent-blue"
+                      />
+                    </label>
+                  </div>
+
+                  {demoResult && (
+                    <div className="rounded-lg border border-green-500/40 bg-green-500/10 px-3 py-2 text-sm text-green-300">
+                      {demoResult}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-3 border-t border-border bg-panel/80 px-4 py-3">
+                  <Button type="button" variant="outline" onClick={() => setIsDemoOpen(false)}>
+                    {t("common.cancel")}
+                  </Button>
+                  <Button type="button" variant="neon-blue" className="gap-2" onClick={submitPropagationDemo} disabled={isSimulatingDemo}>
+                    <FlaskConical className="h-4 w-4" />
+                    {isSimulatingDemo ? "Running..." : "Run demo"}
                   </Button>
                 </div>
               </motion.div>

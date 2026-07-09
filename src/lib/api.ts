@@ -50,6 +50,7 @@ export interface BackendPost {
   content: string
   visibility: "PUBLIC" | "PRIVATE"
   mediaUrls: string[]
+  sharedPost?: BackendPost
   likeCount: number
   commentCount: number
   shareCount: number
@@ -77,6 +78,34 @@ export interface BackendPostShare {
   authorAvatarUrl?: string
   content?: string
   createdAt: string
+}
+
+export type DemoPropagationPattern = "ORGANIC" | "VIRAL_BURST" | "COORDINATED"
+
+export interface DemoPropagationRequest {
+  postId: string
+  demoUserCount: number
+  shares: number
+  likes: number
+  comments: number
+  durationSeconds: number
+  pattern: DemoPropagationPattern
+}
+
+export interface DemoPropagationResponse {
+  postId: string
+  pattern: DemoPropagationPattern
+  demoUsersAvailable: number
+  usersCreated: number
+  likesCreated: number
+  commentsCreated: number
+  sharesCreated: number
+  totalLikes: number
+  totalComments: number
+  totalShares: number
+  durationSeconds: number
+  startedAt: string
+  endedAt: string
 }
 
 export interface UploadedImage {
@@ -185,6 +214,22 @@ export interface Friendship {
   updatedAt: string
 }
 
+export interface FollowUser {
+  id: string
+  email: string
+  displayName: string
+  avatarUrl?: string
+  followedAt: string
+}
+
+export interface FollowStatus {
+  following: boolean
+}
+
+export interface FollowCount {
+  count: number
+}
+
 export type MessageType = "TEXT" | "IMAGE" | "VIDEO" | "LINK"
 
 export interface MessageParticipant {
@@ -217,6 +262,32 @@ export interface BackendMessage {
   updatedAt: string
 }
 
+export type MessageSocketEvent =
+  | {
+      type: "MESSAGE_CREATED"
+      conversationId: string
+      message: BackendMessage
+      messageId: string
+      reaction?: null
+      userId?: null
+    }
+  | {
+      type: "REACTION_UPDATED"
+      conversationId: string
+      message?: null
+      messageId: string
+      reaction: MessageReaction
+      userId: string
+    }
+  | {
+      type: "REACTION_DELETED"
+      conversationId: string
+      message?: null
+      messageId: string
+      reaction?: null
+      userId: string
+    }
+
 export interface MessageConversation {
   id: string
   friend: MessageParticipant
@@ -246,11 +317,39 @@ export interface AppPost {
   shares: number
   isLiked?: boolean
   aiState: "monitoring" | "suspicious" | "verified"
+  sharedPost?: AppPost
 }
 
 export const getAccessToken = () => {
   if (typeof window === "undefined") return null
   return window.localStorage.getItem(ACCESS_TOKEN_KEY)
+}
+
+const getMessageSocketUrl = () => {
+  const token = getAccessToken()
+  if (!token || typeof window === "undefined") return null
+
+  const url = new URL(API_BASE_URL, window.location.origin)
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
+  url.pathname = "/ws/messages"
+  url.search = ""
+  url.searchParams.set("token", token)
+  return url.toString()
+}
+
+export const createMessageSocket = (onEvent: (event: MessageSocketEvent) => void) => {
+  const url = getMessageSocketUrl()
+  if (!url) return null
+
+  const socket = new WebSocket(url)
+  socket.addEventListener("message", (message) => {
+    try {
+      onEvent(JSON.parse(message.data) as MessageSocketEvent)
+    } catch {
+      // Ignore malformed realtime payloads; REST remains the source of truth.
+    }
+  })
+  return socket
 }
 
 const setAccessToken = (token: string) => {
@@ -371,6 +470,7 @@ export const mapPost = (post: BackendPost): AppPost => ({
   shares: post.shareCount ?? 0,
   isLiked: post.likedByCurrentUser ?? false,
   aiState: "monitoring",
+  sharedPost: post.sharedPost ? mapPost(post.sharedPost) : undefined,
 })
 
 export const mapPostComment = (comment: BackendPostComment) => ({
@@ -531,8 +631,12 @@ export const postApi = {
     }))
   },
 
-  async comments(postId: string) {
-    return (await apiRequest<BackendPostComment[]>(`/api/posts/${postId}/comments`)).map(mapPostComment)
+  async comments(postId: string, page = 0, size = 10) {
+    const response = await apiRequest<PagedResponse<BackendPostComment>>(`/api/posts/${postId}/comments?page=${page}&size=${size}`)
+    return {
+      ...response,
+      content: response.content.map(mapPostComment),
+    }
   },
 
   async comment(postId: string, content: string) {
@@ -543,9 +647,18 @@ export const postApi = {
   },
 
   async share(postId: string, content: string) {
-    return apiRequest<BackendPostShare>(`/api/posts/${postId}/shares`, {
+    return mapPost(await apiRequest<BackendPost>(`/api/posts/${postId}/shares`, {
       method: "POST",
       body: JSON.stringify({ content }),
+    }))
+  },
+}
+
+export const demoApi = {
+  async simulatePropagation(payload: DemoPropagationRequest) {
+    return apiRequest<DemoPropagationResponse>("/api/demo/propagation/simulate", {
+      method: "POST",
+      body: JSON.stringify(payload),
     })
   },
 }
@@ -616,6 +729,48 @@ export const friendApi = {
     return apiRequest<void>(`/api/friends/${friendshipId}`, {
       method: "DELETE",
     })
+  },
+}
+
+export const followApi = {
+  async follow(userId: string) {
+    return apiRequest<FollowUser>(`/api/follows/${userId}`, {
+      method: "POST",
+    })
+  },
+
+  async cancelFollow(userId: string) {
+    return apiRequest<void>(`/api/follows/${userId}`, {
+      method: "DELETE",
+    })
+  },
+
+  async countFollowers(userId: string) {
+    return apiRequest<FollowCount>(`/api/follows/${userId}/followers/count`)
+  },
+
+  async countFollowing(userId: string) {
+    return apiRequest<FollowCount>(`/api/follows/${userId}/following/count`)
+  },
+
+  async getFollowers(userId: string, page = 0, size = 20) {
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+    })
+    return apiRequest<PagedResponse<FollowUser>>(`/api/follows/${userId}/followers?${params.toString()}`)
+  },
+
+  async getFollowing(userId: string, page = 0, size = 20) {
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+    })
+    return apiRequest<PagedResponse<FollowUser>>(`/api/follows/${userId}/following?${params.toString()}`)
+  },
+
+  async isFollowing(userId: string) {
+    return apiRequest<FollowStatus>(`/api/follows/${userId}/status`)
   },
 }
 

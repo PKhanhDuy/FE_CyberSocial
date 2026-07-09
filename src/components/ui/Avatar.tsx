@@ -1,5 +1,6 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
+import { optimizeCloudinaryImage } from "@/lib/media"
 
 interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
   src?: string
@@ -15,7 +16,13 @@ const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
       {...props}
     >
       {src ? (
-        <img src={src} alt={alt} className="aspect-square h-full w-full object-cover" />
+        <img
+          src={optimizeCloudinaryImage(src, 160)}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          className="aspect-square h-full w-full object-cover"
+        />
       ) : (
         <div className="flex h-full w-full items-center justify-center rounded-full bg-panel font-medium text-foreground">
           {fallback}

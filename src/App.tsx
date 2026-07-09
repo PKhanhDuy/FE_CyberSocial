@@ -56,12 +56,12 @@ function App() {
 
         {/* Protected routes */}
         <Route element={<AuthGuard />}>
-          <Route path="/messages" element={<Messages />} />
           <Route path="/" element={<MainLayout />}>
             <Route index element={<Home />} />
             <Route path="explore" element={<Explore />} />
             <Route path="verified" element={<VerifiedNews />} />
             <Route path="friends" element={<Friends />} />
+            <Route path="messages" element={<Messages />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="profile" element={<Profile />} />
             <Route path="users/:userId" element={<PublicProfile />} />

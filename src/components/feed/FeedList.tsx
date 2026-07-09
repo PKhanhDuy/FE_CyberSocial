@@ -4,6 +4,7 @@ import { PostCard } from "./PostCard"
 import type { Post } from "@/mocks/types"
 import { postApi } from "@/lib/api"
 import { useTranslation } from "react-i18next"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 interface FeedListProps {
   searchQuery?: string
@@ -30,38 +31,43 @@ const filterPosts = (posts: Post[], query: string) => {
 }
 
 export function FeedList({ searchQuery = "", onViewAnalysis }: FeedListProps) {
-  const [posts, setPosts] = useState<Post[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery.trim())
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const normalizedQuery = debouncedSearchQuery.trim()
+  const queryKey = ["posts", normalizedQuery] as const
 
   const prependRepost = useCallback((post: Post) => {
-    setPosts((currentPosts) => [post, ...currentPosts])
-  }, [])
+    queryClient.setQueryData<Awaited<ReturnType<typeof postApi.list>>>(queryKey, (current) => (
+      current ? { ...current, content: [post, ...current.content] } : current
+    ))
+  }, [queryClient, queryKey])
 
-  const loadPosts = useCallback(async () => {
-    const normalizedQuery = searchQuery.trim()
-    setIsLoading(true)
-    setError(null)
-    try {
-      const response = normalizedQuery ? await postApi.search(normalizedQuery) : await postApi.list()
-      setPosts(filterPosts(response.content, normalizedQuery))
-    } catch (error) {
-      setError(error instanceof Error ? error.message : t("post.noPostLoad"))
-      setPosts(filterPosts(MOCK_POSTS, normalizedQuery))
-    } finally {
-      setIsLoading(false)
+  useEffect(() => {
+    const timeoutId = window.setTimeout(
+      () => setDebouncedSearchQuery(searchQuery.trim()),
+      searchQuery.trim() ? 300 : 0,
+    )
+    return () => {
+      window.clearTimeout(timeoutId)
     }
   }, [searchQuery])
 
+  const { data, error, isLoading, refetch } = useQuery({
+    queryKey,
+    queryFn: () => normalizedQuery ? postApi.search(normalizedQuery) : postApi.list(),
+  })
+
   useEffect(() => {
-    const timeoutId = window.setTimeout(loadPosts, searchQuery.trim() ? 300 : 0)
-    window.addEventListener("cybersocial:post-created", loadPosts)
-    return () => {
-      window.clearTimeout(timeoutId)
-      window.removeEventListener("cybersocial:post-created", loadPosts)
+    const refreshPosts = () => {
+      void refetch()
     }
-  }, [loadPosts, searchQuery])
+    window.addEventListener("cybersocial:post-created", refreshPosts)
+    return () => window.removeEventListener("cybersocial:post-created", refreshPosts)
+  }, [refetch])
+
+  const posts = filterPosts(data?.content ?? (error ? MOCK_POSTS : []), normalizedQuery)
+  const errorMessage = error instanceof Error ? error.message : error ? t("post.noPostLoad") : null
 
   return (
     <div className="space-y-2 mt-6 pb-20">
@@ -71,9 +77,9 @@ export function FeedList({ searchQuery = "", onViewAnalysis }: FeedListProps) {
         </div>
       )}
 
-      {error && (
+      {errorMessage && (
         <div className="p-4 rounded-xl border border-danger/40 bg-danger/10 text-sm text-foreground">
-          {error}
+          {errorMessage}
         </div>
       )}
 
@@ -83,7 +89,7 @@ export function FeedList({ searchQuery = "", onViewAnalysis }: FeedListProps) {
 
       {!isLoading && posts.length === 0 && (
         <div className="text-center py-8 text-muted font-mono">
-          {searchQuery.trim() ? t("post.notFound") : t("post.noPosts")}
+          {normalizedQuery ? t("post.notFound") : t("post.noPosts")}
         </div>
       )}
     </div>

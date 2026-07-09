@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
-import { useNavigate, useParams } from "react-router-dom"
-import { Activity, Briefcase, Cake, GraduationCap, Globe, Heart, Languages, Link as LinkIcon, MapPin, ShieldCheck, UserCircle } from "lucide-react"
+import { Link, useNavigate, useParams } from "react-router-dom"
+import { Activity, Briefcase, Cake, GraduationCap, Globe, Heart, Languages, Link as LinkIcon, MapPin, ShieldCheck, UserCheck, UserCircle, UserPlus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
 import { PostCard } from "@/components/feed/PostCard"
 import { cn } from "@/lib/utils"
-import { postApi, userApi } from "@/lib/api"
+import { followApi, postApi, userApi } from "@/lib/api"
 import type { Post, User } from "@/mocks/types"
 import { useAuthStore } from "@/store/useAuthStore"
+import { optimizeCloudinaryImage } from "@/lib/media"
 
 const DEFAULT_COVER = "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=1600"
 
@@ -23,6 +24,9 @@ export function PublicProfile() {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [followLoading, setFollowLoading] = useState(false)
+  const [followerCount, setFollowerCount] = useState(0)
 
   const tabs = [
     { id: "activity", label: t("profile.activity"), icon: Activity },
@@ -43,12 +47,16 @@ export function PublicProfile() {
       setIsLoading(true)
       setError(null)
       try {
-        const [user, userPosts] = await Promise.all([
+        const [user, userPosts, followersCount, followStatus] = await Promise.all([
           userApi.get(userId),
           postApi.byAuthor(userId),
+          followApi.countFollowers(userId),
+          followApi.isFollowing(userId),
         ])
         setProfile(user)
         setPosts(userPosts.content)
+        setFollowerCount(followersCount.count)
+        setIsFollowing(followStatus.following)
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "Khong tai duoc ho so")
       } finally {
@@ -58,6 +66,27 @@ export function PublicProfile() {
 
     loadProfile()
   }, [currentUser?.id, userId])
+
+  const handleFollowToggle = async () => {
+    if (!userId || followLoading) return
+
+    setFollowLoading(true)
+    try {
+      if (isFollowing) {
+        await followApi.cancelFollow(userId)
+        setIsFollowing(false)
+        setFollowerCount((current) => Math.max(current - 1, 0))
+      } else {
+        await followApi.follow(userId)
+        setIsFollowing(true)
+        setFollowerCount((current) => current + 1)
+      }
+    } catch (toggleError) {
+      setError(toggleError instanceof Error ? toggleError.message : "Khong cap nhat duoc trang thai theo doi")
+    } finally {
+      setFollowLoading(false)
+    }
+  }
 
   const renderInfoRow = (label: string, value: unknown, icon: ReactNode) => {
     const displayValue = Array.isArray(value) ? value.join(", ") : value
@@ -98,7 +127,7 @@ export function PublicProfile() {
           <div className="absolute inset-0 bg-gradient-to-br from-accent-blue/20 to-accent-pink/20 mix-blend-overlay z-10" />
           <div
             className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url(${profile.cover || DEFAULT_COVER})` }}
+            style={{ backgroundImage: `url(${optimizeCloudinaryImage(profile.cover || DEFAULT_COVER, 1600)})` }}
           />
           <div className="absolute inset-0 bg-[linear-gradient(rgba(96,165,250,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(96,165,250,0.1)_1px,transparent_1px)] bg-[size:20px_20px] z-10 opacity-30 pointer-events-none" />
         </div>
@@ -108,8 +137,9 @@ export function PublicProfile() {
             <div className="relative">
               <div className="w-32 h-32 rounded-xl border-2 border-accent-blue p-1 bg-background neon-border-blue relative overflow-hidden">
                 <img
-                  src={profile.avatar}
+                  src={optimizeCloudinaryImage(profile.avatar, 320)}
                   alt={profile.username}
+                  decoding="async"
                   className="w-full h-full object-cover rounded-lg"
                 />
               </div>
@@ -119,6 +149,30 @@ export function PublicProfile() {
                 </div>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={handleFollowToggle}
+              disabled={followLoading}
+              className={cn(
+                "h-11 px-5 rounded-lg border text-sm font-bold tracking-wider transition-colors flex items-center gap-2",
+                isFollowing
+                  ? "border-accent-blue/40 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/20"
+                  : "border-accent-blue bg-accent-blue text-black hover:bg-accent-blue/90"
+              )}
+            >
+              {isFollowing ? (
+                <>
+                  <UserCheck className="w-4 h-4" />
+                  {t("profile.following")}
+                </>
+              ) : (
+                <>
+                  <UserPlus className="w-4 h-4" />
+                  {t("profile.follow")}
+                </>
+              )}
+            </button>
           </div>
 
           <div className="space-y-4">
@@ -169,6 +223,10 @@ export function PublicProfile() {
               <div>
                 <div className="text-xl font-bold text-foreground tracking-wider">{posts.length}</div>
                 <div className="text-xs text-muted uppercase tracking-widest">{t("home.post")}</div>
+              </div>
+              <div>
+                <div className="text-xl font-bold text-foreground tracking-wider">{followerCount}</div>
+                <div className="text-xs text-muted uppercase tracking-widest">{t("profile.followersCount")}</div>
               </div>
               <div>
                 <div className="text-xl font-bold text-accent-blue tracking-wider">{profile.trustScore}%</div>

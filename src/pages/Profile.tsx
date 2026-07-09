@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, Link } from "react-router-dom"
 import { ShieldCheck, Network, Activity, Settings, MapPin, Link as LinkIcon, Edit2, UserCircle, Heart, Briefcase, GraduationCap, Globe, Languages, Cake, Camera, HelpCircle, Moon, Sun, LogOut, ChevronLeft, ChevronRight, KeyRound, Check, Images, Music2, Plus, Play, Trash2, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
@@ -7,11 +7,13 @@ import { PostCard } from "@/components/feed/PostCard"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
 import type { Post } from "@/mocks/types"
 import { Progress } from "@/components/ui/Progress"
-import { postApi, uploadApi } from "@/lib/api"
+import { postApi, uploadApi, followApi, type FollowUser } from "@/lib/api"
 import { createStoryHighlight, loadStoryHighlights, removeStoryFromHighlight, removeStoryHighlight, STORY_HIGHLIGHTS_EVENT, type StoryHighlight } from "@/lib/storyHighlights"
 import { useAuthStore } from "@/store/useAuthStore"
 import { useThemeStore } from "@/store/useThemeStore"
 import { useLanguageStore } from "@/store/useLanguageStore"
+import { optimizeCloudinaryImage } from "@/lib/media"
+import { Avatar } from "@/components/ui/Avatar"
 
 type SettingsMenuView = "main" | "privacy" | "language"
 
@@ -36,6 +38,16 @@ export function Profile() {
   const refreshCurrentUser = useAuthStore((state) => state.refreshCurrentUser)
   const [userPosts, setUserPosts] = useState<Post[]>([])
   const [postsError, setPostsError] = useState<string | null>(null)
+  const [followerCount, setFollowerCount] = useState(0)
+  const [followingCount, setFollowingCount] = useState(0)
+  const [showFollowersList, setShowFollowersList] = useState(false)
+  const [showFollowingList, setShowFollowingList] = useState(false)
+  const [followers, setFollowers] = useState<FollowUser[]>([])
+  const [following, setFollowing] = useState<FollowUser[]>([])
+  const [followersLoading, setFollowersLoading] = useState(false)
+  const [followingLoading, setFollowingLoading] = useState(false)
+  const [followersError, setFollowersError] = useState<string | null>(null)
+  const [followingError, setFollowingError] = useState<string | null>(null)
   const [profileError, setProfileError] = useState<string | null>(null)
   const [storyHighlights, setStoryHighlights] = useState<StoryHighlight[]>([])
   const [isCreatingHighlight, setIsCreatingHighlight] = useState(false)
@@ -136,6 +148,100 @@ export function Profile() {
     window.addEventListener("cybersocial:post-created", loadUserPosts)
     return () => window.removeEventListener("cybersocial:post-created", loadUserPosts)
   }, [currentUser?.id])
+
+  useEffect(() => {
+    const loadFollowCounts = async () => {
+      if (!currentUser?.id) {
+        setFollowerCount(0)
+        setFollowingCount(0)
+        return
+      }
+
+      try {
+        const [followersResponse, followingResponse] = await Promise.all([
+          followApi.countFollowers(currentUser.id),
+          followApi.countFollowing(currentUser.id),
+        ])
+        setFollowerCount(followersResponse.count)
+        setFollowingCount(followingResponse.count)
+      } catch {
+        setFollowerCount(0)
+        setFollowingCount(0)
+      }
+    }
+
+    loadFollowCounts()
+  }, [currentUser?.id])
+
+  useEffect(() => {
+    const loadFollowers = async () => {
+      if (!showFollowersList || !currentUser?.id) return
+
+      setFollowersLoading(true)
+      setFollowersError(null)
+      try {
+        const response = await followApi.getFollowers(currentUser.id, 0, 50)
+        setFollowers(response.content)
+      } catch (error) {
+        setFollowersError(error instanceof Error ? error.message : "Khong tai duoc danh sach nguoi theo doi")
+        setFollowers([])
+      } finally {
+        setFollowersLoading(false)
+      }
+    }
+
+    loadFollowers()
+  }, [currentUser?.id, showFollowersList])
+
+  useEffect(() => {
+    const loadFollowing = async () => {
+      if (!showFollowingList || !currentUser?.id) return
+
+      setFollowingLoading(true)
+      setFollowingError(null)
+      try {
+        const response = await followApi.getFollowing(currentUser.id, 0, 50)
+        setFollowing(response.content)
+      } catch (error) {
+        setFollowingError(error instanceof Error ? error.message : "Khong tai duoc danh sach dang theo doi")
+        setFollowing([])
+      } finally {
+        setFollowingLoading(false)
+      }
+    }
+
+    loadFollowing()
+  }, [currentUser?.id, showFollowingList])
+
+  const handleFollowersToggle = () => {
+    setShowFollowingList(false)
+    setShowFollowersList((current) => !current)
+  }
+
+  const handleFollowingToggle = () => {
+    setShowFollowersList(false)
+    setShowFollowingList((current) => !current)
+  }
+
+  const renderFollowUserList = (users: FollowUser[]) => (
+    users.map((user) => (
+      <Link
+        key={user.id}
+        to={user.id === currentUser?.id ? "/profile" : `/users/${user.id}`}
+        className="flex items-center gap-3 p-3 rounded-xl border border-border bg-panel/60 hover:border-accent-blue/40 transition-colors"
+      >
+        <Avatar
+          src={user.avatarUrl || `https://i.pravatar.cc/150?u=${encodeURIComponent(user.email || user.id)}`}
+          fallback={user.displayName[0] || "U"}
+          className="h-11 w-11"
+        />
+        <div className="min-w-0">
+          <div className="font-bold text-foreground truncate">{user.displayName}</div>
+          <div className="text-xs text-muted font-mono truncate">{user.email}</div>
+        </div>
+      </Link>
+    ))
+  )
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -430,7 +536,7 @@ export function Profile() {
           <div className="absolute inset-0 bg-gradient-to-br from-accent-blue/20 to-accent-pink/20 mix-blend-overlay z-10" />
           <div
             className="absolute inset-0 bg-cover bg-center transition-all duration-300 group-hover:scale-[1.02]"
-            style={{ backgroundImage: `url(${userProfile.cover})` }}
+            style={{ backgroundImage: `url(${optimizeCloudinaryImage(userProfile.cover, 1600)})` }}
           />
           {/* Cyber grid effect */}
           <div className="absolute inset-0 bg-[linear-gradient(rgba(96,165,250,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(96,165,250,0.1)_1px,transparent_1px)] bg-[size:20px_20px] z-10 opacity-30 pointer-events-none" />
@@ -460,8 +566,9 @@ export function Profile() {
             >
               <div className="w-32 h-32 rounded-xl border-2 border-accent-blue p-1 bg-background neon-border-blue relative overflow-hidden">
                 <img
-                  src={userProfile.avatar}
+                  src={optimizeCloudinaryImage(userProfile.avatar, 320)}
                   alt={userProfile.username}
+                  decoding="async"
                   className="w-full h-full object-cover rounded-lg"
                 />
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 text-white">
@@ -681,14 +788,66 @@ export function Profile() {
             {/* Quick Stats */}
             <div className="flex gap-8 pt-4 border-t border-border">
               <div>
-                <div className="text-xl font-bold text-foreground tracking-wider">8,492</div>
+                <div className="text-xl font-bold text-foreground tracking-wider">{userPosts.length}</div>
                 <div className="text-xs text-muted uppercase tracking-widest">{t("profile.postsCount")}</div>
               </div>
+              <button
+                type="button"
+                onClick={handleFollowersToggle}
+                className={cn(
+                  "text-left transition-colors rounded-lg px-1 -mx-1",
+                  showFollowersList ? "text-accent-blue" : "hover:text-accent-blue"
+                )}
+              >
+                <div className="text-xl font-bold tracking-wider">{followerCount}</div>
+                <div className="text-xs text-muted uppercase tracking-widest">{t("profile.followersCount")}</div>
+              </button>
+              <button
+                type="button"
+                onClick={handleFollowingToggle}
+                className={cn(
+                  "text-left transition-colors rounded-lg px-1 -mx-1",
+                  showFollowingList ? "text-accent-blue" : "hover:text-accent-blue"
+                )}
+              >
+                <div className="text-xl font-bold tracking-wider">{followingCount}</div>
+                <div className="text-xs text-muted uppercase tracking-widest">{t("profile.followingCount")}</div>
+              </button>
               <div>
                 <div className="text-xl font-bold text-accent-blue tracking-wider">{userProfile.trustScore}%</div>
                 <div className="text-xs text-muted uppercase tracking-widest">{t("profile.trustRate")}</div>
               </div>
             </div>
+
+            {showFollowersList && (
+              <div className="pt-4 border-t border-border space-y-3">
+                {followersLoading && (
+                  <div className="text-sm text-muted font-mono">{t("notifications.async")}</div>
+                )}
+                {followersError && (
+                  <div className="text-sm text-danger">{followersError}</div>
+                )}
+                {!followersLoading && !followersError && followers.length === 0 && (
+                  <div className="text-sm text-muted font-mono">{t("profile.noFollowers")}</div>
+                )}
+                {!followersLoading && renderFollowUserList(followers)}
+              </div>
+            )}
+
+            {showFollowingList && (
+              <div className="pt-4 border-t border-border space-y-3">
+                {followingLoading && (
+                  <div className="text-sm text-muted font-mono">{t("notifications.async")}</div>
+                )}
+                {followingError && (
+                  <div className="text-sm text-danger">{followingError}</div>
+                )}
+                {!followingLoading && !followingError && following.length === 0 && (
+                  <div className="text-sm text-muted font-mono">{t("profile.noFollowing")}</div>
+                )}
+                {!followingLoading && renderFollowUserList(following)}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -761,7 +920,7 @@ export function Profile() {
                 >
                   <div className="relative h-36 overflow-hidden rounded-lg border border-border bg-panel-hover">
                     {highlight.coverUrl ? (
-                      <img src={highlight.coverUrl} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                      <img src={optimizeCloudinaryImage(highlight.coverUrl, 320)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
                     ) : (
                       <div className="h-full w-full flex items-center justify-center text-muted">
                         <Images className="h-8 w-8" />
@@ -1057,7 +1216,7 @@ export function Profile() {
                   className="h-full w-full object-contain"
                 />
               ) : (
-                <img src={selectedHighlightItem.mediaUrl} alt="" className="h-full w-full object-cover" />
+                <img src={optimizeCloudinaryImage(selectedHighlightItem.mediaUrl, 1200)} alt="" decoding="async" className="h-full w-full object-cover" />
               )}
 
               <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/80 to-transparent p-4">
@@ -1080,8 +1239,9 @@ export function Profile() {
 
                 <div className="flex items-center gap-3">
                   <img
-                    src={userProfile.avatar}
+                    src={optimizeCloudinaryImage(userProfile.avatar, 160)}
                     alt={userProfile.username}
+                    decoding="async"
                     className="h-10 w-10 rounded-full border border-white/40 object-cover"
                   />
                   <div className="min-w-0">
