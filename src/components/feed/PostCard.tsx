@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react"
+import { useMemo, useState, type FormEvent } from "react"
 import type { Post } from "@/mocks/types"
 import { Link } from "react-router-dom"
 import { createPortal } from "react-dom"
@@ -6,13 +6,15 @@ import { Avatar } from "@/components/ui/Avatar"
 import { Badge } from "@/components/ui/Badge"
 import { Progress } from "@/components/ui/Progress"
 import { Button } from "@/components/ui/Button"
-import { Activity, FlaskConical, Heart, MessageSquare, Repeat2, Send, Share, ShieldAlert, ShieldCheck, X } from "lucide-react"
+import { Activity, FlaskConical, Heart, Loader2, MessageSquare, Repeat2, Send, Share, ShieldAlert, ShieldCheck, X } from "lucide-react"
 import { AnimatePresence, motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { demoApi, postApi, type DemoPropagationPattern } from "@/lib/api"
 import { useAuthStore } from "@/store/useAuthStore"
 import { useTranslation } from "react-i18next"
 import { optimizeCloudinaryImage } from "@/lib/media"
+import { usePostVerification } from "@/hooks/usePostVerification"
+import { buildPostWithVerification, resolvePostTrustScore } from "@/lib/postVerification"
 
 interface PostCardProps {
   post: Post
@@ -100,12 +102,51 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
     durationSeconds: 60,
     pattern: "VIRAL_BURST" as DemoPropagationPattern,
   })
-  const isSuspicious = post.aiState === "suspicious"
-  const isVerified = post.aiState === "verified"
-  const isMonitoring = post.aiState === "monitoring"
+  const { t } = useTranslation()
+  const totalInteractions = likeCount + commentCount + shareCount
+  const { verification, refetch: refetchVerification } = usePostVerification(post.id, totalInteractions)
+  const displayPost = useMemo(
+    () => buildPostWithVerification(
+      {
+        ...post,
+        likes: likeCount,
+        comments: commentCount,
+        shares: shareCount,
+        isLiked,
+      },
+      verification,
+    ),
+    [post, verification, likeCount, commentCount, shareCount, isLiked],
+  )
+  const isSuspicious = displayPost.aiState === "suspicious"
+  const isVerified = displayPost.aiState === "verified"
+  const isAnalyzing = verification?.status === "ANALYZING"
+  const isPending = verification?.status === "PENDING" && (verification.nextThreshold ?? 0) > 0
+  const isFailed = verification?.status === "FAILED"
+  const isMonitoring = !isSuspicious && !isVerified
+  const interactionProgress = verification?.nextThreshold
+    ? Math.min(100, Math.round((totalInteractions / verification.nextThreshold) * 100))
+    : 0
+  const showInteractionProgress = Boolean(verification?.nextThreshold && verification.nextThreshold > 0 && !isAnalyzing)
+  const passedFirstThreshold = verification?.status === "PENDING"
+    && (verification.analysisTier ?? 0) === 0
+    && totalInteractions >= 5
+  const postTrustScore = resolvePostTrustScore(verification)
+  const headerStatusText = isAnalyzing
+    ? t("post.aiAnalyzing")
+    : isFailed
+      ? t("post.aiAnalysisFailed")
+      : passedFirstThreshold
+        ? t("post.awaitingFirstAnalysis")
+        : isPending
+          ? t("post.waitingInteractions", { current: totalInteractions, target: verification!.nextThreshold })
+        : isSuspicious
+          ? t("post.isSuspicious")
+          : isVerified
+            ? t("post.isVerified")
+            : t("post.isMonitoring")
   const authorAvatar = currentUser?.id === post.author.id ? currentUser.avatar : post.author.avatar
   const authorProfilePath = currentUser?.id === post.author.id ? "/profile" : `/users/${post.author.id}`
-  const { t } = useTranslation()
   const canInteract = Boolean(currentUser)
 
   const toggleLike = async () => {
@@ -125,6 +166,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
       setLikeCount(updatedPost.likes)
       setCommentCount(updatedPost.comments)
       setShareCount(updatedPost.shares)
+      void refetchVerification()
     } catch (error) {
       setIsLiked(previousLiked)
       setLikeCount(previousLikeCount)
@@ -184,6 +226,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
       setCommentDraft("")
       setIsCommentsOpen(true)
       setHasLoadedComments(true)
+      void refetchVerification()
     } catch (error) {
       setActionError(error instanceof Error ? error.message : t("post.actions.actionError"))
     } finally {
@@ -202,6 +245,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
       setRepostText("")
       setIsRepostOpen(false)
       onRepostCreated(repost)
+      void refetchVerification()
     } catch (error) {
       setActionError(error instanceof Error ? error.message : t("post.actions.actionError"))
     } finally {
@@ -237,6 +281,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
       setHasMoreComments(result.totalComments > 0)
       setDemoResult(`Created ${result.sharesCreated} shares, ${result.likesCreated} likes, ${result.commentsCreated} comments.`)
       window.dispatchEvent(new Event("cybersocial:post-created"))
+      void refetchVerification()
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Could not run propagation demo.")
     } finally {
@@ -260,22 +305,29 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
         "px-4 py-2 border-b flex justify-between items-center text-xs font-semibold tracking-wider",
         isSuspicious ? "bg-accent-pink/10 border-accent-pink/30 text-accent-pink" :
           isVerified ? "bg-green-500/10 border-green-500/30 text-green-400" :
-            "bg-accent-blue/10 border-accent-blue/30 text-accent-blue"
+            isFailed ? "bg-danger/10 border-danger/30 text-danger" :
+              "bg-accent-blue/10 border-accent-blue/30 text-accent-blue"
       )}>
-        <div className="flex items-center gap-2">
-          {isSuspicious && <ShieldAlert className="w-4 h-4" />}
-          {isVerified && <ShieldCheck className="w-4 h-4" />}
-          {isMonitoring && <Activity className="w-4 h-4 animate-pulse" />}
-          <span>
-            {isSuspicious ? t("post.isSuspicious") :
-              isVerified ? t("post.isVerified") :
-                t("post.isMonitoring")}
-          </span>
+        <div className="flex items-center gap-2 min-w-0">
+          {isSuspicious && <ShieldAlert className="w-4 h-4 shrink-0" />}
+          {isVerified && <ShieldCheck className="w-4 h-4 shrink-0" />}
+          {(isMonitoring || isAnalyzing || isPending) && (
+            isAnalyzing
+              ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+              : <Activity className="w-4 h-4 shrink-0 animate-pulse" />
+          )}
+          <span className="truncate">{headerStatusText}</span>
+          {verification?.status === "COMPLETED" && verification.label && (
+            <Badge variant={verification.label === "FAKE" ? "suspicious" : "verified"} className="shrink-0">
+              {verification.label === "FAKE" ? t("post.labelFake") : t("post.labelReal")}
+            </Badge>
+          )}
         </div>
-        <div className="flex items-center gap-3">
-          {isMonitoring && (
+        <div className="flex items-center gap-3 shrink-0">
+          {showInteractionProgress && (
             <div className="hidden sm:flex items-center gap-2 w-32">
-              <Progress value={Math.random() * 100} indicatorColor="bg-accent-blue" className="h-1.5" />
+              <Progress value={interactionProgress} indicatorColor="bg-accent-blue" className="h-1.5" />
+              <span className="font-mono text-[10px] text-muted">{interactionProgress}%</span>
             </div>
           )}
           <button
@@ -318,9 +370,18 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
           </div>
           <div className="text-right">
             <div className="text-xs text-muted">{t("post.trustScore")}</div>
-            <div className={cn("font-mono font-bold", post.author.trustScore > 80 ? "text-green-400" : post.author.trustScore < 50 ? "text-accent-pink" : "text-yellow-400")}>
-              {post.author.trustScore}%
-            </div>
+            {postTrustScore != null ? (
+              <div className={cn(
+                "font-mono font-bold",
+                postTrustScore > 80 ? "text-green-400" : postTrustScore < 50 ? "text-accent-pink" : "text-yellow-400",
+              )}>
+                {postTrustScore}%
+              </div>
+            ) : isAnalyzing ? (
+              <div className="font-mono font-bold text-accent-blue animate-pulse">...</div>
+            ) : (
+              <div className="font-mono font-bold text-muted" title={t("post.trustScorePending")}>—</div>
+            )}
           </div>
         </div>
 
@@ -343,30 +404,41 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
                 className="w-full h-auto object-cover max-h-96"
               />
             )}
-            {isSuspicious && (
+            {isSuspicious && displayPost.aiAnalysis && (
               <div className="absolute inset-0 bg-accent-pink/10 pointer-events-none flex items-center justify-center">
                 <div className="bg-panel/ backdrop-blur-md border border-accent-pink/50 text-accent-pink px-4 py-2 rounded-full font-bold text-sm tracking-wider uppercase flex items-center gap-2 shadow-[var(--shadow-neon-pink)]">
                   <ShieldAlert className="w-4 h-4" />
-                  {t("post.fakeProbability")}: {(post.aiAnalysis!.fakeProbability * 100).toFixed(0)}%
+                  {t("post.fakeProbability")}: {(displayPost.aiAnalysis.fakeProbability * 100).toFixed(0)}%
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {isSuspicious && (
+        {isSuspicious && displayPost.aiAnalysis && (
           <div className="bg-accent-pink/5 border border-accent-pink/30 rounded-lg p-4 mb-4">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-bold text-accent-pink">{t("post.riskLevel")}: {post.aiAnalysis?.riskLevel}</span>
-              <Button variant="neon-pink" size="sm" onClick={() => onViewAnalysis(post)}>
+              <span className="text-sm font-bold text-accent-pink">{t("post.riskLevel")}: {displayPost.aiAnalysis.riskLevel}</span>
+              <Button variant="neon-pink" size="sm" onClick={() => onViewAnalysis(displayPost)}>
                 {t("post.viewAnalysis")}
               </Button>
             </div>
             <ul className="text-xs text-muted space-y-1 list-disc pl-4">
-              {post.aiAnalysis?.reasons.map((r, i) => (
+              {displayPost.aiAnalysis.reasons.map((r, i) => (
                 <li key={i}>{r}</li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {isVerified && displayPost.aiAnalysis && (
+          <div className="bg-green-500/5 border border-green-500/30 rounded-lg p-4 mb-4">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-bold text-green-400">{t("post.riskLevel")}: {displayPost.aiAnalysis.riskLevel}</span>
+              <Button variant="outline" size="sm" onClick={() => onViewAnalysis(displayPost)}>
+                {t("post.viewAnalysis")}
+              </Button>
+            </div>
           </div>
         )}
 
@@ -587,6 +659,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
                     >
                       <option value="VIRAL_BURST">Viral burst</option>
                       <option value="COORDINATED">Coordinated</option>
+                      <option value="CHAIN">Share chain</option>
                       <option value="ORGANIC">Organic</option>
                     </select>
                   </div>

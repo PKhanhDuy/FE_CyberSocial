@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react"
 import { ShieldCheck, Server, Database, Lock } from "lucide-react"
-import { MOCK_POSTS } from "@/mocks/data"
 import { PostCard } from "@/components/feed/PostCard"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
 import type { Post } from "@/mocks/types"
@@ -14,19 +13,16 @@ export function VerifiedNews() {
   const [error, setError] = useState<string | null>(null)
   const { t } = useTranslation()
 
-  // Filter for only verified posts
-  const verifiedPosts = posts.filter(post => post.aiState === "verified")
-
   useEffect(() => {
     const loadPosts = async () => {
       setIsLoading(true)
       setError(null)
       try {
-        const response = await postApi.list()
+        const response = await postApi.listVerified()
         setPosts(response.content)
-      } catch (error) {
-        setError(error instanceof Error ? error.message : "Khong tai duoc tin xac thuc")
-        setPosts(MOCK_POSTS)
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : "Khong tai duoc tin xac thuc")
+        setPosts([])
       } finally {
         setIsLoading(false)
       }
@@ -101,16 +97,16 @@ export function VerifiedNews() {
           </div>
         )}
 
-        {verifiedPosts.length > 0 ? (
-          verifiedPosts.map((post) => (
+        {!isLoading && posts.length > 0 ? (
+          posts.map((post) => (
             <PostCard key={post.id} post={post} onViewAnalysis={setSelectedPost} />
           ))
-        ) : (
+        ) : !isLoading && !error ? (
           <div className="p-8 border border-green-500/20 bg-green-500/5 rounded-xl text-center">
             <ShieldCheck className="w-12 h-12 text-green-500/30 mx-auto mb-4" />
             <p className="text-green-400 font-mono">{t("verifyedNews.scanning")}</p>
           </div>
-        )}
+        ) : null}
       </div>
 
       {selectedPost && (

@@ -1,28 +1,29 @@
 import type { Post } from "@/mocks/types"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Activity, ShieldAlert, GitMerge } from "lucide-react"
-import { PropagationGraphScene } from "../3d/PropagationGraphScene"
+import { PropagationGraphScene, getGraphStats } from "../3d/PropagationGraphScene"
+import { buildPropagationGraphFromTimeline } from "@/lib/propagationGraphLayout"
+import { PropagationTimeline } from "./PropagationTimeline"
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { cn } from "@/lib/utils"
 import { createPortal } from "react-dom"
+import { useTranslation } from "react-i18next"
+import { buildTimelineChartData } from "@/lib/postVerification"
 
 interface AIAnalysisModalProps {
   post: Post
   onClose: () => void
 }
 
-const mockChartData = [
-  { time: '0m', nodes: 0 },
-  { time: '5m', nodes: 12 },
-  { time: '10m', nodes: 45 },
-  { time: '15m', nodes: 180 },
-  { time: '20m', nodes: 890 },
-  { time: '25m', nodes: 3200 },
-  { time: '30m', nodes: 8400 },
-]
-
 export function AIAnalysisModal({ post, onClose }: AIAnalysisModalProps) {
+  const { t } = useTranslation()
+  const analysis = post.aiAnalysis
   const isSuspicious = post.aiState === "suspicious"
+  const fakeProbabilityPercent = analysis ? (analysis.fakeProbability * 100).toFixed(1) : "0.0"
+  const chartData = analysis ? buildTimelineChartData(analysis.propagationTimeline) : []
+  const timeline = analysis?.propagationTimeline ?? []
+  const graphLayout = buildPropagationGraphFromTimeline(timeline)
+  const graphStats = getGraphStats(graphLayout)
 
   return createPortal(
     <AnimatePresence>
@@ -53,14 +54,30 @@ export function AIAnalysisModal({ post, onClose }: AIAnalysisModalProps) {
 
           {/* 3D Visualization Area */}
           <div className="relative flex-1 bg-black/50 overflow-hidden min-h-[300px] md:min-h-0">
-            <PropagationGraphScene isSuspicious={isSuspicious} />
+            <PropagationGraphScene
+              timeline={timeline}
+              isSuspicious={isSuspicious}
+              fallbackAuthor={post.author.username}
+            />
             
             <div className="absolute top-6 left-6 z-10 pointer-events-none">
               <div className="bg-panel/ backdrop-blur-md border border-border rounded-lg p-3 inline-flex flex-col gap-1">
-                <span className="text-xs text-muted font-semibold tracking-wider">BIỂU ĐỒ LAN TRUYỀN</span>
-                <span className={cn("text-lg font-bold font-mono", isSuspicious ? "text-accent-pink" : "text-accent-blue")}>
-                  {post.aiAnalysis?.propagationVelocity.toFixed(1)} N/s
+                <span className="text-xs text-muted font-semibold tracking-wider">
+                  {graphStats.mode === "tree" ? "CÂY LAN TRUYỀN" : "ĐỒ THỊ LAN TRUYỀN"}
                 </span>
+                <span className={cn("text-lg font-bold font-mono", isSuspicious ? "text-accent-pink" : "text-accent-blue")}>
+                  {graphStats.actorCount} node · {graphStats.eventCount} sự kiện
+                </span>
+                {graphStats.mode === "tree" && (
+                  <span className="text-[10px] text-muted font-mono">
+                    Độ sâu chuỗi share: {graphStats.maxDepth}
+                  </span>
+                )}
+                {graphStats.influentialCount > 0 && (
+                  <span className="text-[10px] text-muted font-mono">
+                    {graphStats.influentialCount} tín hiệu TIGE chính
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -78,81 +95,110 @@ export function AIAnalysisModal({ post, onClose }: AIAnalysisModalProps) {
             </div>
 
             <div className="p-6 flex-1 space-y-6">
-              {/* Risk Gauge & Status */}
-              <div className={cn(
-                "rounded-xl p-4 border relative overflow-hidden",
-                isSuspicious ? "bg-accent-pink/5 border-accent-pink/30" : "bg-accent-blue/5 border-accent-blue/30"
-              )}>
-                <div className={cn("absolute top-0 right-0 w-32 h-32 blur-3xl -mr-10 -mt-10 opacity-20", isSuspicious ? "bg-accent-pink" : "bg-accent-blue")} />
-                <div className="flex justify-between items-start mb-4 relative">
-                  <div>
-                    <div className="text-xs text-muted font-semibold mb-1 tracking-wider uppercase">Mức độ đe dọa</div>
-                    <div className={cn("text-2xl font-black tracking-widest", isSuspicious ? "text-accent-pink" : "text-accent-blue")}>
-                      {post.aiAnalysis?.riskLevel}
+              {!analysis ? (
+                <div className="rounded-xl border border-border bg-background p-6 text-sm text-muted text-center">
+                  {t("post.analysisNotReady")}
+                </div>
+              ) : (
+                <>
+                  {/* Risk Gauge & Status */}
+                  <div className={cn(
+                    "rounded-xl p-4 border relative overflow-hidden",
+                    isSuspicious ? "bg-accent-pink/5 border-accent-pink/30" : "bg-accent-blue/5 border-accent-blue/30"
+                  )}>
+                    <div className={cn("absolute top-0 right-0 w-32 h-32 blur-3xl -mr-10 -mt-10 opacity-20", isSuspicious ? "bg-accent-pink" : "bg-accent-blue")} />
+                    <div className="flex justify-between items-start mb-4 relative">
+                      <div>
+                        <div className="text-xs text-muted font-semibold mb-1 tracking-wider uppercase">Mức độ đe dọa</div>
+                        <div className={cn("text-2xl font-black tracking-widest", isSuspicious ? "text-accent-pink" : "text-accent-blue")}>
+                          {analysis.riskLevel}
+                        </div>
+                      </div>
+                      {isSuspicious && <ShieldAlert className="w-8 h-8 text-accent-pink" />}
+                    </div>
+                    
+                    <div className="space-y-2 relative">
+                      <div className="flex justify-between text-xs text-muted">
+                        <span>Xác suất Deepfake</span>
+                        <span className="font-mono">{fakeProbabilityPercent}%</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-border rounded-full overflow-hidden">
+                        <div 
+                          className={cn("h-full transition-all", isSuspicious ? "bg-accent-pink" : "bg-accent-blue")}
+                          style={{ width: `${analysis.fakeProbability * 100}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
-                  {isSuspicious && <ShieldAlert className="w-8 h-8 text-accent-pink" />}
-                </div>
-                
-                <div className="space-y-2 relative">
-                  <div className="flex justify-between text-xs text-muted">
-                    <span>Xác suất Deepfake</span>
-                    <span className="font-mono">{(post.aiAnalysis!.fakeProbability * 100).toFixed(1)}%</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-border rounded-full overflow-hidden">
-                    <div 
-                      className={cn("h-full transition-all", isSuspicious ? "bg-accent-pink" : "bg-accent-blue")}
-                      style={{ width: `${post.aiAnalysis!.fakeProbability * 100}%` }}
+
+                  {/* Propagation Timeline */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-muted mb-3 tracking-wider uppercase flex items-center gap-2">
+                      <GitMerge className="w-4 h-4" />
+                      Timeline lan truyền (TIGE)
+                    </h3>
+                    <PropagationTimeline
+                      events={analysis.propagationTimeline}
+                      isSuspicious={isSuspicious}
                     />
                   </div>
-                </div>
-              </div>
 
-              {/* Explanations */}
-              <div>
-                <h3 className="text-sm font-semibold text-muted mb-3 tracking-wider uppercase flex items-center gap-2">
-                  <GitMerge className="w-4 h-4" />
-                  Các yếu tố chính
-                </h3>
-                <div className="space-y-2">
-                  {post.aiAnalysis?.reasons.map((reason, idx) => (
-                    <div key={idx} className="bg-background border border-border rounded-lg p-3 text-sm text-muted flex items-start gap-3">
-                      <div className={cn("mt-1 w-1.5 h-1.5 rounded-full shrink-0", isSuspicious ? "bg-accent-pink" : "bg-accent-blue")} />
-                      {reason}
+                  {/* Explanations */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-muted mb-3 tracking-wider uppercase flex items-center gap-2">
+                      <GitMerge className="w-4 h-4" />
+                      Các yếu tố chính
+                    </h3>
+                    <div className="space-y-2">
+                      {analysis.reasons.length > 0 ? analysis.reasons.map((reason, idx) => (
+                        <div key={idx} className="bg-background border border-border rounded-lg p-3 text-sm text-muted flex items-start gap-3">
+                          <div className={cn("mt-1 w-1.5 h-1.5 rounded-full shrink-0", isSuspicious ? "bg-accent-pink" : "bg-accent-blue")} />
+                          {reason}
+                        </div>
+                      )) : (
+                        <div className="bg-background border border-border rounded-lg p-3 text-sm text-muted">
+                          {t("post.analysisNotReady")}
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </div>
 
-              {/* Velocity Timeline Chart */}
-              <div>
-                <h3 className="text-sm font-semibold text-muted mb-3 tracking-wider uppercase">Vận tốc lây lan</h3>
-                <div className="h-40 w-full bg-background border border-border rounded-lg p-3 pt-4">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={mockChartData}>
-                      <defs>
-                        <linearGradient id="colorNodes" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={isSuspicious ? "#2dd4bf" : "#38bdf8"} stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor={isSuspicious ? "#2dd4bf" : "#38bdf8"} stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="time" stroke="#2a2a40" fontSize={10} tickLine={false} axisLine={false} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '8px' }}
-                        itemStyle={{ color: isSuspicious ? "#2dd4bf" : "#38bdf8" }}
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="nodes" 
-                        stroke={isSuspicious ? "#2dd4bf" : "#38bdf8"} 
-                        fillOpacity={1} 
-                        fill="url(#colorNodes)" 
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
+                  {/* Cumulative propagation chart */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-muted mb-3 tracking-wider uppercase">Mức độ lan truyền</h3>
+                    <div className="h-40 w-full bg-background border border-border rounded-lg p-3 pt-4">
+                      {chartData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={chartData}>
+                            <defs>
+                              <linearGradient id="colorNodes" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor={isSuspicious ? "#2dd4bf" : "#38bdf8"} stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor={isSuspicious ? "#2dd4bf" : "#38bdf8"} stopOpacity={0}/>
+                              </linearGradient>
+                            </defs>
+                            <XAxis dataKey="time" stroke="#2a2a40" fontSize={10} tickLine={false} axisLine={false} />
+                            <Tooltip 
+                              contentStyle={{ backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '8px' }}
+                              itemStyle={{ color: isSuspicious ? "#2dd4bf" : "#38bdf8" }}
+                            />
+                            <Area 
+                              type="monotone" 
+                              dataKey="nodes" 
+                              stroke={isSuspicious ? "#2dd4bf" : "#38bdf8"} 
+                              fillOpacity={1} 
+                              fill="url(#colorNodes)" 
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-xs text-muted">
+                          Chưa đủ sự kiện để vẽ biểu đồ.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </motion.div>

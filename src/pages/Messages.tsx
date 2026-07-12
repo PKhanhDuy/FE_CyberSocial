@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import EmojiPicker, { Theme } from "emoji-picker-react"
-import { ArrowLeft, Hand, ImagePlus, Link as LinkIcon, Loader2, MessageCircle, Send, Smile, Video } from "lucide-react"
+import { ArrowLeft, Hand, ImagePlus, Link as LinkIcon, Loader2, MessageCircle, Send, Smile, Video, X } from "lucide-react"
 import { Avatar } from "@/components/ui/Avatar"
 import { Button } from "@/components/ui/Button"
 import { cn } from "@/lib/utils"
@@ -32,6 +32,12 @@ const messagePreview = (message?: BackendMessage) => {
 
 type DraftMode = "TEXT" | "LINK"
 
+type PendingMedia = {
+  file: File
+  previewUrl: string
+  messageType: "IMAGE" | "VIDEO"
+}
+
 export function Messages() {
   const { t } = useTranslation()
   const currentUser = useAuthStore((state) => state.user)
@@ -47,6 +53,7 @@ export function Messages() {
   const [isLoading, setIsLoading] = useState(true)
   const [isOpeningConversation, setIsOpeningConversation] = useState(false)
   const [isSending, setIsSending] = useState(false)
+  const [pendingMedia, setPendingMedia] = useState<PendingMedia | null>(null)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -128,6 +135,15 @@ export function Messages() {
     }
   }
 
+  const clearPendingMedia = useCallback(() => {
+    setPendingMedia((current) => {
+      if (current) {
+        URL.revokeObjectURL(current.previewUrl)
+      }
+      return null
+    })
+  }, [])
+
   const closeConversation = () => {
     setSelectedFriend(null)
     setSelectedConversation(null)
@@ -135,8 +151,17 @@ export function Messages() {
     setDraft("")
     setDraftMode("TEXT")
     setIsEmojiOpen(false)
+    clearPendingMedia()
     setError(null)
   }
+
+  useEffect(() => {
+    return () => {
+      if (pendingMedia) {
+        URL.revokeObjectURL(pendingMedia.previewUrl)
+      }
+    }
+  }, [pendingMedia])
 
   const updateLatestMessage = (message: BackendMessage) => {
     setConversations((current) => current.map((conversation) => (
@@ -264,7 +289,12 @@ export function Messages() {
     }
   }
 
-  const submitDraft = () => {
+  const submitDraft = async () => {
+    if (pendingMedia) {
+      await sendPendingMedia()
+      return
+    }
+
     const value = draft.trim()
     if (!value) return
     if (draftMode === "LINK") {
@@ -272,6 +302,33 @@ export function Messages() {
       return
     }
     sendMessage({ messageType: "TEXT", content: value })
+  }
+
+  const sendPendingMedia = async () => {
+    if (!pendingMedia || !selectedConversation || isSending) return
+
+    const { file, messageType } = pendingMedia
+    setIsSending(true)
+    setError(null)
+    try {
+      const uploaded = messageType === "VIDEO"
+        ? await uploadApi.video(file)
+        : await uploadApi.image(file)
+      const message = await messageApi.sendMessage(selectedConversation.id, {
+        messageType,
+        mediaUrl: uploaded.url,
+      })
+      updateLatestMessage(message)
+      upsertMessage(message)
+      clearPendingMedia()
+      setDraft("")
+      setDraftMode("TEXT")
+      setIsEmojiOpen(false)
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : t("message.failedSendFile"))
+    } finally {
+      setIsSending(false)
+    }
   }
 
   const sendWave = () => {
@@ -284,27 +341,29 @@ export function Messages() {
     fileInputRef.current.click()
   }
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ""
     if (!file || !selectedConversation) return
 
-    setIsSending(true)
-    setError(null)
-    try {
-      const isVideo = file.type.startsWith("video/")
-      const uploaded = isVideo ? await uploadApi.video(file) : await uploadApi.image(file)
-      const message = await messageApi.sendMessage(selectedConversation.id, {
-        messageType: isVideo ? "VIDEO" : "IMAGE",
-        mediaUrl: uploaded.url,
-      })
-      upsertMessage(message)
-      updateLatestMessage(message)
-    } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : t("message.failedSendFile"))
-    } finally {
-      setIsSending(false)
+    const isVideo = file.type.startsWith("video/")
+    if (!isVideo && !file.type.startsWith("image/")) {
+      setError(t("message.failedSendFile"))
+      return
     }
+
+    setPendingMedia((current) => {
+      if (current) {
+        URL.revokeObjectURL(current.previewUrl)
+      }
+      return {
+        file,
+        previewUrl: URL.createObjectURL(file),
+        messageType: isVideo ? "VIDEO" : "IMAGE",
+      }
+    })
+    setDraftMode("TEXT")
+    setError(null)
   }
 
   const reactToMessage = async (messageId: string, emoji: string) => {
@@ -505,6 +564,39 @@ export function Messages() {
               className="hidden"
               onChange={handleFileChange}
             />
+
+            {pendingMedia && (
+              <div className="mb-3">
+                <div className="relative inline-block">
+                  <div className="h-20 w-20 overflow-hidden rounded-lg border border-border bg-panel shadow-sm">
+                    {pendingMedia.messageType === "IMAGE" ? (
+                      <img
+                        src={pendingMedia.previewUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <video
+                        src={pendingMedia.previewUrl}
+                        className="h-full w-full object-cover"
+                        muted
+                        playsInline
+                      />
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearPendingMedia}
+                    disabled={isSending}
+                    aria-label={t("message.removeAttachment")}
+                    className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-md transition-colors hover:bg-danger/10 hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="mb-2 flex items-center gap-2">
               <button type="button" onClick={() => openFilePicker("image/*")} className="rounded-lg p-2 text-accent-blue hover:bg-accent-blue/10">
                 <ImagePlus className="h-5 w-5" />
@@ -536,6 +628,7 @@ export function Messages() {
                 )}
               </div>
             </div>
+
             <div className="flex gap-2">
               <input
                 value={draft}
@@ -549,7 +642,13 @@ export function Messages() {
                 placeholder={draftMode === "LINK" ? t("message.linkPlaceholder") : t("message.inputPlaceholder")}
                 className="h-11 flex-1 rounded-lg border border-border bg-panel px-3 text-sm text-foreground outline-none focus:border-accent-blue"
               />
-              <Button type="button" variant="neon-blue" className="gap-2" onClick={submitDraft} disabled={isSending || !draft.trim() || !selectedConversation}>
+              <Button
+                type="button"
+                variant="neon-blue"
+                className="gap-2"
+                onClick={submitDraft}
+                disabled={isSending || !selectedConversation || (!draft.trim() && !pendingMedia)}
+              >
                 {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>

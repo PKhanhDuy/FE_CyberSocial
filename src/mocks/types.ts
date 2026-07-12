@@ -6,6 +6,7 @@ export interface User {
   handle: string
   avatar: string
   cover?: string
+  role?: "USER" | "ADMIN"
   isVerified: boolean
   trustScore: number
   bio?: string
@@ -38,9 +39,35 @@ export interface Post {
   sharedPost?: Post
 }
 
+export interface PropagationTimelineEvent {
+  eventIndex: number
+  eventId?: string
+  parentEventId?: string | null
+  depth?: number
+  relativeTime: string
+  eventType: string
+  eventTypeLabel: string
+  actorLabel: string
+  tigeRemoval?: number | null
+  isInfluential: boolean
+}
+
+export interface EventAttribution {
+  eventIndex: number
+  eventType: string
+  eventTypeLabel?: string
+  relativeTime?: string
+  actorLabel?: string
+  tigeRemoval?: number | null
+  confidenceDrop?: number | null
+  summary?: string
+}
+
 export interface AIAnalysis {
   riskLevel: 'THẤP' | 'TRUNG BÌNH' | 'CAO' | 'NGHIÊM TRỌNG'
   fakeProbability: number
   reasons: string[]
   propagationVelocity: number // nodes per second
+  propagationTimeline: PropagationTimelineEvent[]
+  eventAttributions: EventAttribution[]
 }
