@@ -82,7 +82,7 @@ export function ForgotPassword() {
               )}
 
               <p className="text-muted text-sm leading-relaxed mb-6 text-center">
-                Nhap email da dang ky tai khoan. He thong se gui mat khau tam thoi toi chinh email do.
+                Nhập email đã đăng ký tài khoản. Hệ thống sẽ gửi link đặt lại mật khẩu tới email đó.
               </p>
 
               {/* Form */}
@@ -141,7 +141,7 @@ export function ForgotPassword() {
               </div>
               <h3 className="text-lg font-bold text-foreground">Gửi Yêu Cầu Thành Công</h3>
               <p className="text-muted text-sm leading-relaxed">
-                Neu email nay da dang ky, he thong da gui mat khau tam thoi den <strong className="text-foreground">{email.trim().toLowerCase()}</strong>. Vui long kiem tra hop thu den hoac spam.
+                Nếu email này đã đăng ký, hệ thống đã gửi link đặt lại mật khẩu đến <strong className="text-foreground">{email.trim().toLowerCase()}</strong>. Vui lòng kiểm tra hộp thư đến hoặc spam. Link có hiệu lực trong 30 phút.
               </p>
               <button
                 onClick={() => setIsSubmitted(false)}

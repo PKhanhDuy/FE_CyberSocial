@@ -71,48 +71,7 @@ const fallbackMusicTracks: MusicTrack[] = [
   { id: "track_3", title: "Orbit Pulse", artist: "Nexus FM", duration: "0:32" },
 ]
 
-const fallbackStories: Story[] = [
-  {
-    id: "story_1",
-    author: {
-      id: "u_2",
-      username: "Glitch_Walker",
-      avatar: "https://i.pravatar.cc/150?u=glitch_walker",
-      isVerified: false,
-    },
-    mediaUrl: "https://images.unsplash.com/photo-1519608487953-e999c86e7455?auto=format&fit=crop&q=80&w=900",
-    mediaType: "image",
-    caption: "Dang quet cac tin hieu bat thuong trong thanh pho.",
-    createdAt: "12 phut",
-  },
-  {
-    id: "story_2",
-    author: {
-      id: "u_3",
-      username: "Cipher_Null",
-      avatar: "https://i.pravatar.cc/150?u=cipher_00",
-      isVerified: false,
-    },
-    mediaUrl: "https://images.unsplash.com/photo-1493246507139-91e8fad9978e?auto=format&fit=crop&q=80&w=900",
-    mediaType: "image",
-    caption: "Mot lat yen tinh truoc khi dong bo node moi.",
-    createdAt: "25 phut",
-    isViewed: true,
-  },
-  {
-    id: "story_3",
-    author: {
-      id: "u_4",
-      username: "Neon Sentinel",
-      avatar: "https://i.pravatar.cc/150?u=neon_sentinel",
-      isVerified: true,
-    },
-    mediaUrl: "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&q=80&w=900",
-    mediaType: "image",
-    caption: "Doi kiem duyet dang truc he thong.",
-    createdAt: "41 phut",
-  },
-]
+const fallbackStories: Story[] = []
 
 const reactionOptions = ["\u2764\ufe0f", "\ud83d\ude02", "\ud83d\ude2e", "\ud83d\ude22", "\ud83d\ude21", "\ud83d\udc4f", "\ud83d\udd25"]
 

@@ -231,9 +231,6 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                   >
                     <Video className="w-5 h-5 group-hover:scale-110 transition-transform" />
                   </button>
-                  <button className="p-2 text-muted hover:text-foreground hover:bg-panel-hover rounded-lg transition-colors group relative" title={t("post.createPost.attachLink")}>
-                    <LinkIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                  </button>
                   <div className="relative flex items-center">
                     <button
                       onClick={() => setShowEmojiPicker(!showEmojiPicker)}

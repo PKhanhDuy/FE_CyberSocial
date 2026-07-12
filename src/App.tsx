@@ -17,6 +17,7 @@ import { AuthGuard, GuestGuard } from "./components/auth/AuthGuard"
 import { Login } from "./pages/Login"
 import { Register } from "./pages/Register"
 import { ForgotPassword } from "./pages/ForgotPassword"
+import { ResetPassword } from "./pages/ResetPassword"
 import { ChangePassword } from "./pages/ChangePassword"
 
 function App() {
@@ -53,6 +54,8 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
         </Route>
+
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Protected routes */}
         <Route element={<AuthGuard />}>

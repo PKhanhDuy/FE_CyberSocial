@@ -80,7 +80,71 @@ export interface BackendPostShare {
   createdAt: string
 }
 
-export type DemoPropagationPattern = "ORGANIC" | "VIRAL_BURST" | "COORDINATED"
+export type PostVerificationStatus = "PENDING" | "ANALYZING" | "COMPLETED" | "FAILED"
+
+export interface BackendEventAttribution {
+  eventIndex: number
+  eventType: string
+  eventTypeLabel?: string
+  relativeTime?: string
+  actorLabel?: string
+  tigeRemoval?: number | null
+  confidenceDrop?: number | null
+  summary?: string
+}
+
+export interface BackendPropagationTimelineEvent {
+  eventIndex: number
+  eventId?: string
+  parentEventId?: string | null
+  depth?: number
+  relativeTime: string
+  eventType: string
+  eventTypeLabel: string
+  actorLabel: string
+  tigeRemoval?: number | null
+  influential: boolean
+}
+
+export interface BackendPostVerification {
+  postId: string
+  status: PostVerificationStatus
+  fakeProbability?: number
+  label?: "REAL" | "FAKE"
+  riskLevel?: "LOW" | "MEDIUM" | "HIGH"
+  threshold?: number
+  mode?: string
+  analysisTier: number
+  interactionCountAtAnalysis: number
+  totalInteractions: number
+  nextThreshold: number
+  explanation?: string
+  eventAttributions?: BackendEventAttribution[]
+  propagationTimeline?: BackendPropagationTimelineEvent[]
+  lastAnalyzedAt?: string
+  updatedAt?: string
+}
+
+export interface PostVerification {
+  postId: string
+  status: PostVerificationStatus
+  fakeProbability?: number
+  label?: "REAL" | "FAKE"
+  riskLevel?: "LOW" | "MEDIUM" | "HIGH"
+  threshold?: number
+  mode?: string
+  analysisTier: number
+  interactionCountAtAnalysis: number
+  totalInteractions: number
+  nextThreshold: number
+  explanation?: string
+  eventAttributions: BackendEventAttribution[]
+  propagationTimeline: BackendPropagationTimelineEvent[]
+  lastAnalyzedAt?: string
+  updatedAt?: string
+}
+
+export type DemoPropagationPattern = "ORGANIC" | "VIRAL_BURST" | "COORDINATED" | "CHAIN"
 
 export interface DemoPropagationRequest {
   postId: string
@@ -435,6 +499,7 @@ export const mapUser = (user: BackendUser): User => ({
   handle: makeHandle(user.displayName || user.email.split("@")[0]),
   avatar: user.avatarUrl || `https://i.pravatar.cc/150?u=${encodeURIComponent(user.email)}`,
   cover: user.coverUrl,
+  role: user.role,
   isVerified: user.role === "ADMIN",
   trustScore: user.role === "ADMIN" ? 98 : 80,
   bio: "Thanh vien CyberSocial.",
@@ -473,6 +538,11 @@ export const mapPost = (post: BackendPost): AppPost => ({
   sharedPost: post.sharedPost ? mapPost(post.sharedPost) : undefined,
 })
 
+export const mapVerifiedPost = (post: BackendPost): AppPost => ({
+  ...mapPost(post),
+  aiState: "verified",
+})
+
 export const mapPostComment = (comment: BackendPostComment) => ({
   id: comment.id,
   postId: comment.postId,
@@ -483,6 +553,25 @@ export const mapPostComment = (comment: BackendPostComment) => ({
   },
   content: comment.content,
   timestamp: relativeTime(comment.createdAt),
+})
+
+export const mapPostVerification = (verification: BackendPostVerification): PostVerification => ({
+  postId: verification.postId,
+  status: verification.status,
+  fakeProbability: verification.fakeProbability,
+  label: verification.label,
+  riskLevel: verification.riskLevel,
+  threshold: verification.threshold,
+  mode: verification.mode,
+  analysisTier: verification.analysisTier ?? 0,
+  interactionCountAtAnalysis: verification.interactionCountAtAnalysis ?? 0,
+  totalInteractions: verification.totalInteractions ?? 0,
+  nextThreshold: verification.nextThreshold ?? 0,
+  explanation: verification.explanation,
+  eventAttributions: verification.eventAttributions ?? [],
+  propagationTimeline: verification.propagationTimeline ?? [],
+  lastAnalyzedAt: verification.lastAnalyzedAt,
+  updatedAt: verification.updatedAt,
 })
 
 const mapNotificationType = (type: BackendNotification["type"]): NotificationType => {
@@ -527,6 +616,20 @@ export const authApi = {
     await apiRequest<void>("/api/auth/forgot-password", {
       method: "POST",
       body: JSON.stringify({ email }),
+    }, false)
+  },
+
+  async validateResetToken(token: string) {
+    const encodedToken = encodeURIComponent(token)
+    return apiRequest<{ valid: boolean }>(`/api/auth/reset-password/validate?token=${encodedToken}`, {
+      method: "GET",
+    }, false)
+  },
+
+  async resetPassword(token: string, newPassword: string) {
+    await apiRequest<void>("/api/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, newPassword }),
     }, false)
   },
 
@@ -583,6 +686,14 @@ export const postApi = {
     return {
       ...response,
       content: response.content.map(mapPost),
+    }
+  },
+
+  async listVerified(page = 0, size = 20) {
+    const response = await apiRequest<PagedResponse<BackendPost>>(`/api/posts/verified?page=${page}&size=${size}`)
+    return {
+      ...response,
+      content: response.content.map(mapVerifiedPost),
     }
   },
 
@@ -646,11 +757,38 @@ export const postApi = {
     }))
   },
 
-  async share(postId: string, content: string) {
+  async share(postId: string, content: string, options?: { viaShareId?: string }) {
     return mapPost(await apiRequest<BackendPost>(`/api/posts/${postId}/shares`, {
       method: "POST",
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({
+        content,
+        viaShareId: options?.viaShareId ?? null,
+      }),
     }))
+  },
+
+  async getVerification(postId: string) {
+    return mapPostVerification(await apiRequest<BackendPostVerification>(`/api/posts/${postId}/verification`))
+  },
+}
+
+export interface ExploreOverview {
+  averageTrustScore: number
+  fakeDetectionRate: number
+  fakePostCount: number
+  totalPostCount: number
+  verifiedPostCount: number
+  pendingScanCount: number
+  analyzingCount: number
+  loadStatus: "STABLE" | "ELEVATED" | "CRITICAL"
+  warningLevel: number
+  syncing: boolean
+  trendingKeywords: string[]
+}
+
+export const exploreApi = {
+  async getOverview() {
+    return apiRequest<ExploreOverview>("/api/explore/overview")
   },
 }
 
@@ -660,6 +798,146 @@ export const demoApi = {
       method: "POST",
       body: JSON.stringify(payload),
     })
+  },
+}
+
+export interface AIMonitoringStats {
+  averageTrustScore: number
+  fakeDetectionRate: number
+  fakePostCount: number
+  totalPostCount: number
+  verifiedPostCount: number
+}
+
+export interface PendingScanPost {
+  postId: string
+  nodeId: string
+  authorDisplayName: string
+  contentPreview: string
+  status: PostVerificationStatus
+  totalInteractions: number
+  nextThreshold: number
+}
+
+export const aiMonitoringApi = {
+  async getStats() {
+    return apiRequest<AIMonitoringStats>("/api/admin/ai/monitoring/stats")
+  },
+
+  async getPendingScan(limit = 3) {
+    return apiRequest<PendingScanPost[]>(`/api/admin/ai/monitoring/pending-scan?limit=${limit}`)
+  },
+}
+
+export interface AdminUser {
+  id: string
+  email: string
+  displayName: string
+  avatarUrl?: string
+  coverUrl?: string
+  role: "USER" | "ADMIN"
+  enabled: boolean
+  themePreference: "LIGHT" | "DARK" | "SYSTEM"
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AdminPost {
+  id: string
+  authorId: string
+  authorDisplayName: string
+  authorAvatarUrl?: string
+  content: string
+  visibility: "PUBLIC" | "PRIVATE"
+  mediaUrls: string[]
+  hidden: boolean
+  hiddenAt?: string
+  likeCount: number
+  commentCount: number
+  shareCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AdminFakePost {
+  postId: string
+  authorId: string
+  authorDisplayName: string
+  contentPreview: string
+  hidden: boolean
+  label?: string
+  fakeProbability?: number
+  riskLevel?: "LOW" | "MEDIUM" | "HIGH"
+  lastAnalyzedAt?: string
+  createdAt: string
+}
+
+export interface AdminStats {
+  totalUsers: number
+  activeUsers: number
+  lockedUsers: number
+  totalPosts: number
+  visiblePosts: number
+  hiddenPosts: number
+  acceptedFriendships: number
+  totalFollows: number
+  totalMessages: number
+  activeStories: number
+  aiStats: AIMonitoringStats
+}
+
+export const adminApi = {
+  async listUsers(params?: { page?: number; size?: number; query?: string; enabled?: boolean; role?: "USER" | "ADMIN" }) {
+    const search = new URLSearchParams()
+    if (params?.page !== undefined) search.set("page", String(params.page))
+    if (params?.size !== undefined) search.set("size", String(params.size))
+    if (params?.query?.trim()) search.set("query", params.query.trim())
+    if (params?.enabled !== undefined) search.set("enabled", String(params.enabled))
+    if (params?.role) search.set("role", params.role)
+    const suffix = search.toString() ? `?${search.toString()}` : ""
+    return apiRequest<PagedResponse<AdminUser>>(`/api/admin/users${suffix}`)
+  },
+
+  async updateUserStatus(userId: string, enabled: boolean) {
+    return apiRequest<AdminUser>(`/api/admin/users/${userId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled }),
+    })
+  },
+
+  async listPosts(params?: { page?: number; size?: number; query?: string; hidden?: boolean }) {
+    const search = new URLSearchParams()
+    if (params?.page !== undefined) search.set("page", String(params.page))
+    if (params?.size !== undefined) search.set("size", String(params.size))
+    if (params?.query?.trim()) search.set("query", params.query.trim())
+    if (params?.hidden !== undefined) search.set("hidden", String(params.hidden))
+    const suffix = search.toString() ? `?${search.toString()}` : ""
+    return apiRequest<PagedResponse<AdminPost>>(`/api/admin/posts${suffix}`)
+  },
+
+  async listFakePosts(params?: { page?: number; size?: number }) {
+    const search = new URLSearchParams()
+    if (params?.page !== undefined) search.set("page", String(params.page))
+    if (params?.size !== undefined) search.set("size", String(params.size))
+    const suffix = search.toString() ? `?${search.toString()}` : ""
+    return apiRequest<PagedResponse<AdminFakePost>>(`/api/admin/posts/fake${suffix}`)
+  },
+
+  async updatePostHidden(postId: string, hidden: boolean) {
+    return apiRequest<AdminPost>(`/api/admin/posts/${postId}/hidden`, {
+      method: "PATCH",
+      body: JSON.stringify({ hidden }),
+    })
+  },
+
+  async deletePost(postId: string) {
+    return apiRequest<void>(`/api/admin/posts/${postId}`, {
+      method: "DELETE",
+    })
+  },
+
+  async getStats() {
+    return apiRequest<AdminStats>("/api/admin/stats")
   },
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 import { Activity, Briefcase, Cake, GraduationCap, Globe, Heart, Languages, Link as LinkIcon, MapPin, ShieldCheck, UserCheck, UserCircle, UserPlus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"

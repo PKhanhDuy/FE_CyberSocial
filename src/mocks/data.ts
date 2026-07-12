@@ -34,7 +34,9 @@ export const MOCK_POSTS: Post[] = [
       riskLevel: "THẤP",
       fakeProbability: 0.02,
       reasons: ["Đã kiểm tra chéo với cơ sở dữ liệu thiên văn công cộng", "Chữ ký phương tiện truyền thông xác thực"],
-      propagationVelocity: 1.2
+      propagationVelocity: 1.2,
+      propagationTimeline: [],
+      eventAttributions: [],
     }
   },
   {
@@ -58,11 +60,19 @@ export const MOCK_POSTS: Post[] = [
       riskLevel: "NGHIÊM TRỌNG",
       fakeProbability: 0.94,
       reasons: [
-        "Vận tốc lan truyền bất thường (+400% so với đường cơ sở)",
-        "Phát hiện dấu vết Deepfake trong phương tiện truyền thông",
-        "Xác định các cụm tương tác bot có phối hợp"
+        "Chia sẻ bởi Bot Alpha lúc t=+2m tăng xác suất tin giả (TIGE +0.082).",
+        "Bình luận bởi Bot Beta lúc t=+5m tăng xác suất tin giả (TIGE +0.051).",
       ],
-      propagationVelocity: 45.8
+      propagationVelocity: 45.8,
+      propagationTimeline: [
+        { eventIndex: 0, relativeTime: "t=0", eventType: "tweet", eventTypeLabel: "Đăng bài", actorLabel: "Glitch_Walker", isInfluential: false },
+        { eventIndex: 1, relativeTime: "t=+2m", eventType: "share", eventTypeLabel: "Chia sẻ", actorLabel: "Bot Alpha", tigeRemoval: 0.082, isInfluential: true },
+        { eventIndex: 2, relativeTime: "t=+5m", eventType: "comment", eventTypeLabel: "Bình luận", actorLabel: "Bot Beta", tigeRemoval: 0.051, isInfluential: true },
+      ],
+      eventAttributions: [
+        { eventIndex: 1, eventType: "share", eventTypeLabel: "Chia sẻ", relativeTime: "t=+2m", actorLabel: "Bot Alpha", tigeRemoval: 0.082, summary: "Chia sẻ bởi Bot Alpha lúc t=+2m tăng xác suất tin giả (TIGE +0.082)." },
+        { eventIndex: 2, eventType: "comment", eventTypeLabel: "Bình luận", relativeTime: "t=+5m", actorLabel: "Bot Beta", tigeRemoval: 0.051, summary: "Bình luận bởi Bot Beta lúc t=+5m tăng xác suất tin giả (TIGE +0.051)." },
+      ],
     }
   },
   {
@@ -85,7 +95,9 @@ export const MOCK_POSTS: Post[] = [
       riskLevel: "THẤP",
       fakeProbability: 0.15,
       reasons: ["Đang quét các tương tác của node..."],
-      propagationVelocity: 0.5
+      propagationVelocity: 0.5,
+      propagationTimeline: [],
+      eventAttributions: [],
     }
   }
 ]
