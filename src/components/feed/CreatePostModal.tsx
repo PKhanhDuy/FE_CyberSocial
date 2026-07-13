@@ -1,7 +1,7 @@
 import { useState, useRef } from "react"
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
-import { X, Image, Video, Link as LinkIcon, Hash, Smile, Send, ShieldCheck, Trash2 } from "lucide-react"
+import { X, Image, Video, Hash, Smile, Send, ShieldCheck, Trash2 } from "lucide-react"
 import EmojiPicker, { Theme } from "emoji-picker-react"
 import { useThemeStore } from "@/store/useThemeStore"
 import { Button } from "@/components/ui/Button"

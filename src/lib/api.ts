@@ -868,8 +868,24 @@ export interface AdminFakePost {
   label?: string
   fakeProbability?: number
   riskLevel?: "LOW" | "MEDIUM" | "HIGH"
+  publicLabel: boolean
+  adminDecision?: "CONFIRM_FAKE" | "REJECT_LABEL" | null
+  reviewedAt?: string
   lastAnalyzedAt?: string
   createdAt: string
+}
+
+export type AdminVerdictDecision = "CONFIRM_FAKE" | "REJECT_LABEL"
+
+export interface AiConfig {
+  enabled: boolean
+  tierThresholds: number[]
+  debounceMinutes: number
+  fakeThresholdPercent: number
+  maxTiers: number
+  timeoutSeconds: number
+  includeSyntheticPosts: boolean
+  updatedAt?: string
 }
 
 export interface AdminStats {
@@ -898,10 +914,10 @@ export const adminApi = {
     return apiRequest<PagedResponse<AdminUser>>(`/api/admin/users${suffix}`)
   },
 
-  async updateUserStatus(userId: string, enabled: boolean) {
+  async updateUserStatus(userId: string, enabled: boolean, reason?: string, note?: string) {
     return apiRequest<AdminUser>(`/api/admin/users/${userId}/status`, {
       method: "PATCH",
-      body: JSON.stringify({ enabled }),
+      body: JSON.stringify({ enabled, reason, note }),
     })
   },
 
@@ -923,21 +939,49 @@ export const adminApi = {
     return apiRequest<PagedResponse<AdminFakePost>>(`/api/admin/posts/fake${suffix}`)
   },
 
-  async updatePostHidden(postId: string, hidden: boolean) {
+  async updatePostHidden(postId: string, hidden: boolean, reason?: string) {
     return apiRequest<AdminPost>(`/api/admin/posts/${postId}/hidden`, {
       method: "PATCH",
-      body: JSON.stringify({ hidden }),
+      body: JSON.stringify({ hidden, reason }),
     })
   },
 
-  async deletePost(postId: string) {
+  async deletePost(postId: string, reason: string) {
     return apiRequest<void>(`/api/admin/posts/${postId}`, {
       method: "DELETE",
+      body: JSON.stringify({ reason }),
+    })
+  },
+
+  async applyVerdict(postId: string, decision: AdminVerdictDecision, note: string) {
+    return apiRequest<AdminFakePost>(`/api/admin/posts/${postId}/verdict`, {
+      method: "POST",
+      body: JSON.stringify({ decision, note }),
     })
   },
 
   async getStats() {
     return apiRequest<AdminStats>("/api/admin/stats")
+  },
+}
+
+export interface UpdateAiConfigPayload {
+  enabled: boolean
+  tierThresholds: number[]
+  debounceMinutes: number
+  fakeThresholdPercent: number
+}
+
+export const aiConfigApi = {
+  async get() {
+    return apiRequest<AiConfig>("/api/admin/ai/config")
+  },
+
+  async update(payload: UpdateAiConfigPayload) {
+    return apiRequest<AiConfig>("/api/admin/ai/config", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    })
   },
 }
 

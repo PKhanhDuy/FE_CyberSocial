@@ -1,11 +1,12 @@
 import { useState } from "react"
 import { NavLink } from "react-router-dom"
-import { Home, Compass, CheckCircle, User, Bell, Users, MessageCircle } from "lucide-react"
+import { Home, Compass, CheckCircle, User, Bell, Users, MessageCircle, Shield } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { CreatePostModal } from "@/components/feed/CreatePostModal"
 import { useNotificationStore } from "@/store/useNotificationStore"
 import { useFriendStore } from "@/store/useFriendStore"
+import { useAuthStore } from "@/store/useAuthStore"
 
 const navItems = [
   { icon: Home, labelKey: "nav.home", path: "/" },
@@ -22,6 +23,7 @@ export function LeftSidebar() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const unreadCount = useNotificationStore((state) => state.unreadCount())
   const incomingFriendRequestCount = useFriendStore((state) => state.incomingRequestCount)
+  const isAdmin = useAuthStore((state) => state.user?.role === "ADMIN")
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 glass-panel border-r-0 border-y-0 z-10 flex flex-col p-6">
@@ -69,6 +71,28 @@ export function LeftSidebar() {
             )}
           </NavLink>
         ))}
+
+        {isAdmin && (
+          <NavLink
+            to="/admin"
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-4 px-4 py-3 rounded-lg transition-all duration-300 relative group",
+                isActive
+                  ? "bg-accent-pink/10 text-accent-pink neon-border-pink"
+                  : "text-muted hover:text-foreground hover:bg-panel-hover"
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <Shield className={cn("w-5 h-5", isActive ? "text-accent-pink" : "group-hover:text-foreground")} />
+                <span className="font-medium tracking-wide flex-1">Quản trị</span>
+                <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted">ADMIN</span>
+              </>
+            )}
+          </NavLink>
+        )}
       </nav>
 
       <div className="mt-auto flex flex-col gap-1">
