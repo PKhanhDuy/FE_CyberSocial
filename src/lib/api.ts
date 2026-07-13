@@ -575,7 +575,7 @@ export const mapPostVerification = (verification: BackendPostVerification): Post
 })
 
 const mapNotificationType = (type: BackendNotification["type"]): NotificationType => {
-  if (type === "SECURITY") return "system_alert"
+  if (type === "SECURITY" || type === "SYSTEM") return "system_alert"
   if (type === "STORY") return "social_like"
   if (type === "POST") return "social_comment"
   return "network_alert"
@@ -697,6 +697,10 @@ export const postApi = {
     }
   },
 
+  async getVerifiedStats() {
+    return apiRequest<VerifiedNewsStats>("/api/posts/verified/stats")
+  },
+
   async search(query: string, page = 0, size = 100) {
     const params = new URLSearchParams({
       query,
@@ -770,6 +774,11 @@ export const postApi = {
   async getVerification(postId: string) {
     return mapPostVerification(await apiRequest<BackendPostVerification>(`/api/posts/${postId}/verification`))
   },
+}
+
+export interface VerifiedNewsStats {
+  verifiedPostCount: number
+  averageAnalysisDelayMs: number | null
 }
 
 export interface ExploreOverview {

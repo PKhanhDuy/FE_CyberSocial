@@ -1,14 +1,32 @@
 import { useEffect, useState } from "react"
-import { ShieldCheck, Server, Database, Lock } from "lucide-react"
+import { ShieldCheck, Clock, Lock, Newspaper } from "lucide-react"
 import { PostCard } from "@/components/feed/PostCard"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
 import type { Post } from "@/mocks/types"
-import { postApi } from "@/lib/api"
+import { postApi, type VerifiedNewsStats } from "@/lib/api"
 import { useTranslation } from "react-i18next"
+
+function formatAnalysisDelay(ms: number | null | undefined, t: (key: string) => string) {
+  if (ms == null || Number.isNaN(ms)) {
+    return t("verifyedNews.noAnalysisDelay")
+  }
+
+  if (ms < 1_000) {
+    return `${Math.round(ms)}ms`
+  }
+  if (ms < 60_000) {
+    return `${(ms / 1_000).toFixed(1)}s`
+  }
+  if (ms < 3_600_000) {
+    return `${Math.round(ms / 60_000)} ${t("verifyedNews.minutes")}`
+  }
+  return `${(ms / 3_600_000).toFixed(1)} ${t("verifyedNews.hours")}`
+}
 
 export function VerifiedNews() {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
+  const [stats, setStats] = useState<VerifiedNewsStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { t } = useTranslation()
@@ -18,11 +36,16 @@ export function VerifiedNews() {
       setIsLoading(true)
       setError(null)
       try {
-        const response = await postApi.listVerified()
+        const [response, statsResponse] = await Promise.all([
+          postApi.listVerified(),
+          postApi.getVerifiedStats(),
+        ])
         setPosts(response.content)
+        setStats(statsResponse)
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "Khong tai duoc tin xac thuc")
         setPosts([])
+        setStats(null)
       } finally {
         setIsLoading(false)
       }
@@ -35,9 +58,7 @@ export function VerifiedNews() {
 
   return (
     <div className="space-y-6 pb-20">
-      {/* Header/Banner Section */}
       <div className="glass-panel border-green-500/30 rounded-xl overflow-hidden relative shadow-[0_0_20px_rgba(34,197,94,0.1)]">
-        {/* Background glow */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-green-500/10 blur-[100px] pointer-events-none" />
 
         <div className="p-8 relative z-10">
@@ -59,17 +80,21 @@ export function VerifiedNews() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-green-500/20 pt-6">
             <div className="flex items-center gap-3">
-              <Database className="w-5 h-5 text-green-500/50" />
+              <Newspaper className="w-5 h-5 text-green-500/50" />
               <div>
-                <div className="text-xl font-bold text-foreground tracking-wider">12,492</div>
-                <div className="text-xs text-muted uppercase tracking-widest">{t("verifyedNews.source")}</div>
+                <div className="text-xl font-bold text-foreground tracking-wider">
+                  {isLoading ? "..." : (stats?.verifiedPostCount ?? 0).toLocaleString()}
+                </div>
+                <div className="text-xs text-muted uppercase tracking-widest">{t("verifyedNews.verifiedPostCount")}</div>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Server className="w-5 h-5 text-green-500/50" />
+              <Clock className="w-5 h-5 text-green-500/50" />
               <div>
-                <div className="text-xl font-bold text-foreground tracking-wider">0.02ms</div>
-                <div className="text-xs text-muted uppercase tracking-widest">{t("verifyedNews.timeDelay")}</div>
+                <div className="text-xl font-bold text-foreground tracking-wider">
+                  {isLoading ? "..." : formatAnalysisDelay(stats?.averageAnalysisDelayMs, t)}
+                </div>
+                <div className="text-xs text-muted uppercase tracking-widest">{t("verifyedNews.averageAnalysisTime")}</div>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -83,7 +108,6 @@ export function VerifiedNews() {
         </div>
       </div>
 
-      {/* Feed List */}
       <div className="space-y-4">
         {isLoading && (
           <div className="text-center py-8 text-muted font-mono">
