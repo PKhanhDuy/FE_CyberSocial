@@ -14,6 +14,13 @@ import { useAuthStore } from "./store/useAuthStore"
 import { useFriendStore } from "./store/useFriendStore"
 import { useNotificationStore } from "./store/useNotificationStore"
 import { AuthGuard, GuestGuard } from "./components/auth/AuthGuard"
+import { AdminGuard } from "./components/auth/AdminGuard"
+import { AdminLayout } from "./components/admin/AdminLayout"
+import { AdminDashboard } from "./pages/admin/AdminDashboard"
+import { AdminUsers } from "./pages/admin/AdminUsers"
+import { AdminPosts } from "./pages/admin/AdminPosts"
+import { AdminAiMonitoring } from "./pages/admin/AdminAiMonitoring"
+import { AdminFakeReview } from "./pages/admin/AdminFakeReview"
 import { Login } from "./pages/Login"
 import { Register } from "./pages/Register"
 import { ForgotPassword } from "./pages/ForgotPassword"
@@ -56,6 +63,17 @@ function App() {
         </Route>
 
         <Route path="/reset-password" element={<ResetPassword />} />
+
+        {/* Admin-only routes (UC20–UC24) */}
+        <Route element={<AdminGuard />}>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<AdminDashboard />} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="posts" element={<AdminPosts />} />
+            <Route path="ai" element={<AdminAiMonitoring />} />
+            <Route path="fake" element={<AdminFakeReview />} />
+          </Route>
+        </Route>
 
         {/* Protected routes */}
         <Route element={<AuthGuard />}>
