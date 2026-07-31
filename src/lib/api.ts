@@ -1265,6 +1265,7 @@ export const notificationApi = {
       title: notification.title,
       message: notification.message,
       timestamp: relativeTime(notification.createdAt),
+      createdAt: notification.createdAt,
       isRead: notification.read,
       source: "CyberSocial Backend",
     }))
@@ -1280,6 +1281,7 @@ export const notificationApi = {
       title: notification.title,
       message: notification.message,
       timestamp: relativeTime(notification.createdAt),
+      createdAt: notification.createdAt,
       isRead: notification.read,
       source: "CyberSocial Backend",
     }

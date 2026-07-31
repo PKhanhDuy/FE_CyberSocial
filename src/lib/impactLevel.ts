@@ -7,7 +7,7 @@ const IMPACT_LABELS: Record<ImpactLevel, string> = {
 }
 
 export function impactLevelFromTige(tigeRemoval?: number | null): ImpactLevel | null {
-  if tigeRemoval == null || Number.isNaN(tigeRemoval)) {
+  if (tigeRemoval == null || Number.isNaN(tigeRemoval)) {
     return null
   }
   const magnitude = Math.abs(tigeRemoval)
