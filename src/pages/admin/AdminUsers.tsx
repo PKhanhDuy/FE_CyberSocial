@@ -1,14 +1,16 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Search } from "lucide-react"
 import { adminApi, type AdminUser } from "@/lib/api"
 import { useAuthStore } from "@/store/useAuthStore"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/Button"
-import { PageHeader, AdminCard, StatusPill } from "@/components/admin/AdminBits"
+import { PageHeader, AdminCard, AdminPagination, StatusPill } from "@/components/admin/AdminBits"
 import { AdminReasonModal } from "@/components/admin/AdminReasonModal"
 
 type StatusFilter = "all" | "active" | "locked"
+
+const USERS_PAGE_SIZE = 20
 
 const LOCK_REASONS = [
   "Vi phạm tiêu chuẩn cộng đồng",
@@ -25,14 +27,19 @@ export function AdminUsers() {
   const currentUser = useAuthStore((state) => state.user)
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState<StatusFilter>("all")
+  const [page, setPage] = useState(0)
   const [target, setTarget] = useState<AdminUser | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const enabledParam = status === "all" ? undefined : status === "active"
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["admin-users", query, status],
-    queryFn: () => adminApi.listUsers({ query, enabled: enabledParam, size: 50 }),
+  useEffect(() => {
+    setPage(0)
+  }, [query, status])
+
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["admin-users", query, status, page],
+    queryFn: () => adminApi.listUsers({ query, enabled: enabledParam, page, size: USERS_PAGE_SIZE }),
   })
 
   const mutation = useMutation({
@@ -176,6 +183,15 @@ export function AdminUsers() {
             </tbody>
           </table>
         </div>
+
+        <AdminPagination
+          page={data?.page ?? page}
+          totalPages={data?.totalPages ?? 0}
+          totalElements={data?.totalElements ?? 0}
+          pageSize={USERS_PAGE_SIZE}
+          onPageChange={setPage}
+          disabled={isLoading || isFetching}
+        />
       </AdminCard>
 
       <AdminReasonModal

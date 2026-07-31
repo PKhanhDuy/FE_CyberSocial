@@ -1,6 +1,7 @@
+import { useState } from "react"
 import type { Post } from "@/mocks/types"
 import { motion, AnimatePresence } from "framer-motion"
-import { X, Activity, ShieldAlert, GitMerge } from "lucide-react"
+import { X, Activity, ShieldAlert, GitMerge, ChevronDown, ChevronUp } from "lucide-react"
 import { PropagationGraphScene, getGraphStats } from "../3d/PropagationGraphScene"
 import { buildPropagationGraphFromTimeline } from "@/lib/propagationGraphLayout"
 import { PropagationTimeline } from "./PropagationTimeline"
@@ -17,6 +18,7 @@ interface AIAnalysisModalProps {
 
 export function AIAnalysisModal({ post, onClose }: AIAnalysisModalProps) {
   const { t } = useTranslation()
+  const [showTechnical, setShowTechnical] = useState(false)
   const analysis = post.aiAnalysis
   const isSuspicious = post.aiState === "suspicious"
   const fakeProbabilityPercent = analysis ? (analysis.fakeProbability * 100).toFixed(1) : "0.0"
@@ -70,12 +72,12 @@ export function AIAnalysisModal({ post, onClose }: AIAnalysisModalProps) {
                 </span>
                 {graphStats.mode === "tree" && (
                   <span className="text-[10px] text-muted font-mono">
-                    Độ sâu chuỗi share: {graphStats.maxDepth}
+                    Chế độ cây share · like/comment không vẽ trên 3D
                   </span>
                 )}
                 {graphStats.influentialCount > 0 && (
                   <span className="text-[10px] text-muted font-mono">
-                    {graphStats.influentialCount} tín hiệu TIGE chính
+                    {graphStats.influentialCount} tương tác quan trọng · node sáng = ảnh hưởng nhiều nhất
                   </span>
                 )}
               </div>
@@ -87,10 +89,10 @@ export function AIAnalysisModal({ post, onClose }: AIAnalysisModalProps) {
             <div className="p-6 border-b border-border">
               <h2 className="text-xl font-bold tracking-wider text-foreground flex items-center gap-2 mb-2">
                 <Activity className="w-5 h-5 text-accent-blue" />
-                PHÂN TÍCH XAI
+                Phân tích lan truyền
               </h2>
               <p className="text-sm text-muted leading-relaxed">
-                Chẩn đoán mô hình AI có thể diễn giải về sự lan truyền mạng lưới cấu trúc và sự bất thường của nội dung.
+                Giải thích cách bài viết lan truyền và các tương tác ảnh hưởng đến kết luận của hệ thống.
               </p>
             </div>
 
@@ -101,6 +103,38 @@ export function AIAnalysisModal({ post, onClose }: AIAnalysisModalProps) {
                 </div>
               ) : (
                 <>
+                  {/* Headline & narrative */}
+                  {(analysis.headline || analysis.narrative) && (
+                    <div className={cn(
+                      "rounded-xl p-4 border space-y-3",
+                      isSuspicious ? "bg-accent-pink/5 border-accent-pink/30" : "bg-accent-blue/5 border-accent-blue/30"
+                    )}>
+                      {analysis.headline && (
+                        <p className={cn(
+                          "text-base font-semibold leading-snug",
+                          isSuspicious ? "text-accent-pink" : "text-accent-blue"
+                        )}>
+                          {analysis.headline}
+                        </p>
+                      )}
+                      {analysis.narrative && (
+                        <p className="text-sm text-muted leading-relaxed">
+                          {analysis.narrative}
+                        </p>
+                      )}
+                      {analysis.contextHints.length > 0 && (
+                        <ul className="space-y-1.5">
+                          {analysis.contextHints.map((hint) => (
+                            <li key={hint} className="text-xs text-muted flex items-start gap-2">
+                              <span className={cn("mt-1.5 h-1 w-1 rounded-full shrink-0", isSuspicious ? "bg-accent-pink" : "bg-accent-blue")} />
+                              {hint}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
                   {/* Risk Gauge & Status */}
                   <div className={cn(
                     "rounded-xl p-4 border relative overflow-hidden",
@@ -119,7 +153,7 @@ export function AIAnalysisModal({ post, onClose }: AIAnalysisModalProps) {
                     
                     <div className="space-y-2 relative">
                       <div className="flex justify-between text-xs text-muted">
-                        <span>Xác suất Deepfake</span>
+                        <span>Mức nghi ngờ tin giả</span>
                         <span className="font-mono">{fakeProbabilityPercent}%</span>
                       </div>
                       <div className="h-1.5 w-full bg-border rounded-full overflow-hidden">
@@ -133,10 +167,13 @@ export function AIAnalysisModal({ post, onClose }: AIAnalysisModalProps) {
 
                   {/* Propagation Timeline */}
                   <div>
-                    <h3 className="text-sm font-semibold text-muted mb-3 tracking-wider uppercase flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-muted mb-1 tracking-wider uppercase flex items-center gap-2">
                       <GitMerge className="w-4 h-4" />
-                      Timeline lan truyền (TIGE)
+                      Diễn biến theo thời gian
                     </h3>
+                    <p className="mb-3 text-xs text-muted">
+                      Các mốc được chọn vì chúng ảnh hưởng nhiều nhất đến kết luận.
+                    </p>
                     <PropagationTimeline
                       events={analysis.propagationTimeline}
                       isSuspicious={isSuspicious}
@@ -162,6 +199,25 @@ export function AIAnalysisModal({ post, onClose }: AIAnalysisModalProps) {
                       )}
                     </div>
                   </div>
+
+                  {/* Technical details toggle */}
+                  {analysis.explanation && (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setShowTechnical((value) => !value)}
+                        className="flex w-full items-center justify-between rounded-lg border border-border bg-background px-3 py-2 text-xs text-muted hover:bg-white/5 transition-colors"
+                      >
+                        <span>Chi tiết kỹ thuật</span>
+                        {showTechnical ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </button>
+                      {showTechnical && (
+                        <div className="mt-2 rounded-lg border border-border bg-background p-3 text-xs text-muted leading-relaxed font-mono">
+                          {analysis.explanation}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Cumulative propagation chart */}
                   <div>

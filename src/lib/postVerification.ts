@@ -28,6 +28,7 @@ function mapTimeline(verification: PostVerification): PropagationTimelineEvent[]
     eventTypeLabel: event.eventTypeLabel,
     actorLabel: event.actorLabel,
     tigeRemoval: event.tigeRemoval,
+    conditionalTige: event.conditionalTige,
     isInfluential: event.influential,
   }))
 }
@@ -41,7 +42,9 @@ function mapAttributions(verification: PostVerification): EventAttribution[] {
     actorLabel: item.actorLabel,
     tigeRemoval: item.tigeRemoval,
     confidenceDrop: item.confidenceDrop,
+    conditionalTige: item.conditionalTige,
     summary: item.summary,
+    impactLevel: item.impactLevel ?? null,
   }))
 }
 
@@ -52,6 +55,10 @@ function buildReasons(verification: PostVerification): string[] {
       .map((item) => item.summary)
       .filter((summary): summary is string => Boolean(summary))
       .slice(0, 5)
+  }
+
+  if (verification.narrative) {
+    return [verification.narrative]
   }
 
   if (!verification.explanation) {
@@ -76,6 +83,10 @@ export function buildAiAnalysis(verification: PostVerification | null): AIAnalys
   return {
     fakeProbability: verification.fakeProbability,
     riskLevel: RISK_LABELS[verification.riskLevel ?? "LOW"] ?? "THẤP",
+    headline: verification.headline,
+    narrative: verification.narrative,
+    contextHints: verification.contextHints ?? [],
+    explanation: verification.explanation,
     reasons: buildReasons(verification),
     propagationVelocity: Math.max(verification.totalInteractions, 1) / 60,
     propagationTimeline,

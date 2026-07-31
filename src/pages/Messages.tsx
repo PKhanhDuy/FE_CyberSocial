@@ -4,8 +4,9 @@ import { ArrowLeft, Hand, ImagePlus, Link as LinkIcon, Loader2, MessageCircle, S
 import { Avatar } from "@/components/ui/Avatar"
 import { Button } from "@/components/ui/Button"
 import { cn } from "@/lib/utils"
-import { createMessageSocket, friendApi, messageApi, uploadApi, type BackendMessage, type FriendUser, type Friendship, type MessageConversation, type MessageReaction, type MessageSocketEvent, type MessageType } from "@/lib/api"
+import { friendApi, messageApi, uploadApi, type BackendMessage, type FriendUser, type Friendship, type MessageConversation, type MessageReaction, type MessageSocketEvent, type MessageType } from "@/lib/api"
 import { useAuthStore } from "@/store/useAuthStore"
+import { usePresenceStore } from "@/store/usePresenceStore"
 import { useThemeStore } from "@/store/useThemeStore"
 import { useTranslation } from "react-i18next"
 import { optimizeCloudinaryImage } from "@/lib/media"
@@ -16,11 +17,6 @@ const reactionEmojis = ["\u2764\uFE0F", "\uD83D\uDE02", "\uD83D\uDE2E", "\uD83D\
 const avatarFor = (user: { id: string; displayName?: string; avatarUrl?: string; email?: string }) => (
   user.avatarUrl || `https://i.pravatar.cc/150?u=${encodeURIComponent(user.email || user.id)}`
 )
-
-const isFriendOnline = (friendId: string) => {
-  const last = friendId.replace(/-/g, "").slice(-1)
-  return Number.parseInt(last, 16) % 2 === 0
-}
 
 const messagePreview = (message?: BackendMessage) => {
   if (!message) return "Hay bat dau cuoc tro chuyen"
@@ -42,6 +38,9 @@ export function Messages() {
   const { t } = useTranslation()
   const currentUser = useAuthStore((state) => state.user)
   const isDarkMode = useThemeStore((state) => state.isDarkMode)
+  const isFriendOnline = usePresenceStore((state) => state.isOnline)
+  const onlineIds = usePresenceStore((state) => state.onlineIds)
+  const subscribeRealtime = usePresenceStore((state) => state.subscribe)
   const [friends, setFriends] = useState<Friendship[]>([])
   const [conversations, setConversations] = useState<MessageConversation[]>([])
   const [selectedFriend, setSelectedFriend] = useState<FriendUser | null>(null)
@@ -247,29 +246,8 @@ export function Messages() {
   }, [deleteRealtimeReaction, updateRealtimeReaction, upsertRealtimeMessage])
 
   useEffect(() => {
-    let reconnectTimer: number | undefined
-    let socket: WebSocket | null = null
-    let disposed = false
-
-    const connect = () => {
-      socket = createMessageSocket(handleRealtimeEvent)
-      if (!socket) return
-
-      socket.addEventListener("close", () => {
-        if (!disposed) {
-          reconnectTimer = window.setTimeout(connect, 3000)
-        }
-      })
-    }
-
-    connect()
-
-    return () => {
-      disposed = true
-      if (reconnectTimer) window.clearTimeout(reconnectTimer)
-      socket?.close()
-    }
-  }, [currentUser?.id, handleRealtimeEvent])
+    return subscribeRealtime(handleRealtimeEvent)
+  }, [handleRealtimeEvent, subscribeRealtime])
 
   const sendMessage = async (payload: { messageType: MessageType; content?: string; mediaUrl?: string; linkUrl?: string }) => {
     if (!selectedConversation || isSending) return
@@ -482,6 +460,9 @@ export function Messages() {
             </div>
             <div className="min-w-0 flex-1 text-left">
               <div className="truncate font-bold text-foreground">{selectedFriend.displayName}</div>
+              <div className="text-xs text-muted">
+                {isFriendOnline(selectedFriend.id) || onlineIds.has(selectedFriend.id) ? "Đang online" : "Offline"}
+              </div>
             </div>
           </div>
 

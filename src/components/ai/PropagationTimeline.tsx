@@ -1,5 +1,6 @@
 import type { PropagationTimelineEvent } from "@/mocks/types"
 import { cn } from "@/lib/utils"
+import { impactLevelLabel, resolveImpactLevel } from "@/lib/impactLevel"
 import { Clock, MessageCircle, Heart, Share2, FileText } from "lucide-react"
 
 interface PropagationTimelineProps {
@@ -20,19 +21,15 @@ function EventIcon({ eventType }: { eventType: string }) {
   return <Icon className="w-3.5 h-3.5" />
 }
 
-function formatTigeScore(value?: number | null) {
-  if (value == null || Number.isNaN(value)) {
-    return null
-  }
-  const sign = value >= 0 ? "+" : ""
-  return `TIGE ${sign}${value.toFixed(3)}`
-}
-
 export function PropagationTimeline({ events, isSuspicious }: PropagationTimelineProps) {
-  if (events.length === 0) {
+  const keyEvents = events.filter((event) => event.isInfluential)
+
+  if (keyEvents.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-background p-4 text-sm text-muted text-center">
-        Chưa có dữ liệu timeline lan truyền.
+        {events.length === 0
+          ? "Chưa có dữ liệu timeline lan truyền."
+          : "Không có sự kiện chính ảnh hưởng đến kết luận."}
       </div>
     )
   }
@@ -43,9 +40,10 @@ export function PropagationTimeline({ events, isSuspicious }: PropagationTimelin
 
   return (
     <div className="space-y-0">
-      {events.map((event, index) => {
-        const tigeLabel = formatTigeScore(event.tigeRemoval)
-        const isLast = index === events.length - 1
+      {keyEvents.map((event, index) => {
+        const impactLevel = resolveImpactLevel(null, event.tigeRemoval)
+        const impactLabel = impactLevelLabel(impactLevel)
+        const isLast = index === keyEvents.length - 1
 
         return (
           <div key={`${event.eventIndex}-${event.relativeTime}`} className="relative flex gap-3 pb-4">
@@ -61,14 +59,22 @@ export function PropagationTimeline({ events, isSuspicious }: PropagationTimelin
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
                 <span className="inline-flex items-center gap-1 font-mono">
                   <Clock className="w-3 h-3" />
-                  {event.relativeTime}
+                  {event.relativeTime.replace(/^t=/, "")}
                 </span>
                 {event.isInfluential && (
                   <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide", accent)}>
-                    TÍN HIỆU CHÍNH
+                    Quan trọng
                   </span>
                 )}
-                {event.eventType === "share" && (event.depth ?? 0) > 1 && (
+                {impactLabel && (
+                  <span
+                    className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold", accent)}
+                    title="Mức ảnh hưởng của tương tác này đến kết luận AI"
+                  >
+                    Ảnh hưởng {impactLabel.toLowerCase()}
+                  </span>
+                )}
+                {(event.eventType === "share" || event.eventType === "retweet") && (event.depth ?? 0) > 1 && (
                   <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-mono text-muted">
                     nhánh depth {event.depth}
                   </span>
@@ -83,12 +89,6 @@ export function PropagationTimeline({ events, isSuspicious }: PropagationTimelin
                 <span className="text-muted"> bởi </span>
                 <span className="font-semibold">{event.actorLabel}</span>
               </div>
-
-              {tigeLabel && (
-                <div className={cn("mt-1 inline-flex rounded-md border px-2 py-0.5 font-mono text-xs", accent)}>
-                  {tigeLabel}
-                </div>
-              )}
             </div>
           </div>
         )

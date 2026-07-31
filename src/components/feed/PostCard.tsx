@@ -6,7 +6,7 @@ import { Avatar } from "@/components/ui/Avatar"
 import { Badge } from "@/components/ui/Badge"
 import { Progress } from "@/components/ui/Progress"
 import { Button } from "@/components/ui/Button"
-import { Activity, FlaskConical, Heart, Loader2, MessageSquare, Repeat2, Send, Share, ShieldAlert, ShieldCheck, X } from "lucide-react"
+import { Activity, FlaskConical, Heart, Link2, Loader2, MessageSquare, Repeat2, Send, Share2, ShieldAlert, ShieldCheck, X } from "lucide-react"
 import { AnimatePresence, motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { demoApi, postApi, type DemoPropagationPattern } from "@/lib/api"
@@ -41,13 +41,27 @@ const isVideoMedia = (url: string) => {
 const COMMENT_PAGE_SIZE = 10
 
 function SharedPostPreview({ post }: { post: Post }) {
+  const currentUser = useAuthStore((state) => state.user)
+  const authorProfilePath = currentUser?.id === post.author.id ? "/profile" : `/users/${post.author.id}`
+  const authorAvatar = currentUser?.id === post.author.id ? currentUser.avatar : post.author.avatar
+
   return (
     <div className="mb-4 rounded-lg border border-border bg-panel/60 overflow-hidden">
       <div className="p-4">
         <div className="mb-3 flex items-center gap-3">
-          <Avatar src={post.author.avatar} fallback={post.author.username[0]} className="h-9 w-9" />
+          <Link
+            to={authorProfilePath}
+            className="relative shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-accent-blue"
+          >
+            <Avatar src={authorAvatar} fallback={post.author.username[0]} className="h-9 w-9" />
+          </Link>
           <div className="min-w-0">
-            <div className="truncate text-sm font-bold text-foreground">{post.author.username}</div>
+            <Link
+              to={authorProfilePath}
+              className="block truncate text-sm font-bold text-foreground hover:text-accent-blue transition-colors"
+            >
+              {post.author.username}
+            </Link>
             <div className="text-xs text-muted">{post.timestamp}</div>
           </div>
         </div>
@@ -87,9 +101,10 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
   const [isSubmittingComment, setIsSubmittingComment] = useState(false)
   const [commentDraft, setCommentDraft] = useState("")
   const [localComments, setLocalComments] = useState<LocalComment[]>([])
-  const [isRepostOpen, setIsRepostOpen] = useState(false)
+  const [isShareOpen, setIsShareOpen] = useState(false)
   const [isSharing, setIsSharing] = useState(false)
-  const [repostText, setRepostText] = useState("")
+  const [shareText, setShareText] = useState("")
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [isDemoOpen, setIsDemoOpen] = useState(false)
   const [isSimulatingDemo, setIsSimulatingDemo] = useState(false)
@@ -234,22 +249,47 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
     }
   }
 
-  const submitRepost = async () => {
+  const submitShare = async (content: string) => {
     if (!currentUser || !onRepostCreated || isSharing) return
 
     setIsSharing(true)
     setActionError(null)
     try {
-      const repost = await postApi.share(post.id, repostText.trim())
+      const repost = await postApi.share(post.id, content, {
+        viaShareId: post.viaShareId,
+      })
       setShareCount((count) => count + 1)
-      setRepostText("")
-      setIsRepostOpen(false)
+      setShareText("")
+      setIsShareOpen(false)
       onRepostCreated(repost)
       void refetchVerification()
     } catch (error) {
       setActionError(error instanceof Error ? error.message : t("post.actions.actionError"))
     } finally {
       setIsSharing(false)
+    }
+  }
+
+  const submitInstantRepost = async () => {
+    await submitShare("")
+  }
+
+  const submitShareWithComment = async () => {
+    const trimmed = shareText.trim()
+    if (!trimmed) return
+    await submitShare(trimmed)
+  }
+
+  const copyPostLink = async () => {
+    const postId = post.sharedPost?.id ?? post.id
+    const url = `${window.location.origin}/?post=${postId}`
+    setActionError(null)
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopyFeedback(t("post.actions.linkCopied"))
+      window.setTimeout(() => setCopyFeedback(null), 2000)
+    } catch {
+      setActionError(t("post.actions.actionError"))
     }
   }
 
@@ -424,7 +464,10 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
               </Button>
             </div>
             <ul className="text-xs text-muted space-y-1 list-disc pl-4">
-              {displayPost.aiAnalysis.reasons.map((r, i) => (
+              {displayPost.aiAnalysis.headline && (
+                <li className="font-medium text-foreground list-none -ml-4 mb-1">{displayPost.aiAnalysis.headline}</li>
+              )}
+              {displayPost.aiAnalysis.reasons.slice(0, displayPost.aiAnalysis.headline ? 2 : 3).map((r, i) => (
                 <li key={i}>{r}</li>
               ))}
             </ul>
@@ -472,7 +515,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
           </button>
           <button
             type="button"
-            onClick={() => setIsRepostOpen(true)}
+            onClick={() => void submitInstantRepost()}
             disabled={!canInteract || !onRepostCreated || isSharing}
             className="flex items-center gap-2 hover:text-green-400 transition-colors group disabled:cursor-not-allowed disabled:opacity-50"
             title={t("post.actions.repost")}
@@ -482,14 +525,32 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
           </button>
           <button
             type="button"
-            onClick={() => setIsRepostOpen(true)}
+            onClick={() => {
+              setActionError(null)
+              setIsShareOpen(true)
+            }}
             disabled={!canInteract || !onRepostCreated || isSharing}
-            className="flex items-center gap-2 hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 hover:text-accent-blue transition-colors group disabled:cursor-not-allowed disabled:opacity-50"
             title={t("post.actions.share")}
           >
-            <Share className="w-5 h-5" />
+            <Share2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
+          </button>
+          <button
+            type="button"
+            onClick={() => void copyPostLink()}
+            disabled={!canInteract}
+            className="flex items-center gap-2 hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            title={t("post.actions.copyLink")}
+          >
+            <Link2 className="w-5 h-5" />
           </button>
         </div>
+
+        {copyFeedback && (
+          <div className="mt-4 rounded-lg border border-accent-blue/40 bg-accent-blue/10 px-3 py-2 text-sm text-foreground">
+            {copyFeedback}
+          </div>
+        )}
 
         {actionError && (
           <div className="mt-4 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-foreground">
@@ -516,18 +577,32 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
                     {t("post.actions.noComments")}
                   </div>
                 )}
-                {localComments.map((comment) => (
+                {localComments.map((comment) => {
+                  const commentAuthorProfilePath =
+                    currentUser?.id === comment.author.id ? "/profile" : `/users/${comment.author.id}`
+                  return (
                   <div key={comment.id} className="flex gap-3">
-                    <Avatar src={comment.author.avatar} fallback={comment.author.username[0]} className="h-8 w-8" />
+                    <Link
+                      to={commentAuthorProfilePath}
+                      className="relative shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                    >
+                      <Avatar src={comment.author.avatar} fallback={comment.author.username[0]} className="h-8 w-8" />
+                    </Link>
                     <div className="min-w-0 flex-1 rounded-lg bg-panel px-3 py-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-foreground">{comment.author.username}</span>
+                        <Link
+                          to={commentAuthorProfilePath}
+                          className="text-sm font-bold text-foreground hover:text-accent-blue transition-colors"
+                        >
+                          {comment.author.username}
+                        </Link>
                         <span className="text-xs text-muted">{comment.timestamp}</span>
                       </div>
                       <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{comment.content}</p>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
                 {hasMoreComments && (
                   <button
                     type="button"
@@ -563,7 +638,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
 
       {typeof document !== "undefined" && createPortal(
         <AnimatePresence>
-          {isRepostOpen && (
+          {isShareOpen && (
             <motion.div
               className="fixed inset-0 z-[10000] flex items-center justify-center bg-background/85 p-4 backdrop-blur-sm"
               initial={{ opacity: 0 }}
@@ -577,10 +652,10 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
                 className="glass-panel w-full max-w-xl overflow-hidden rounded-xl border border-border shadow-[var(--shadow-neon-blue)]"
               >
                 <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                  <h2 className="text-base font-bold text-foreground">{t("post.actions.repostTitle")}</h2>
+                  <h2 className="text-base font-bold text-foreground">{t("post.actions.shareTitle")}</h2>
                   <button
                     type="button"
-                    onClick={() => setIsRepostOpen(false)}
+                    onClick={() => setIsShareOpen(false)}
                     aria-label={t("common.cancel")}
                     className="h-9 w-9 rounded-full text-muted hover:bg-panel-hover hover:text-foreground flex items-center justify-center transition-colors"
                   >
@@ -592,24 +667,24 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
                     <Avatar src={currentUser?.avatar ?? post.author.avatar} fallback={(currentUser?.username ?? post.author.username)[0]} />
                     <div>
                       <div className="font-bold text-foreground">{currentUser?.username ?? post.author.username}</div>
-                      <div className="text-xs text-muted">{t("post.actions.repostAudience")}</div>
+                      <div className="text-xs text-muted">{t("post.actions.shareAudience")}</div>
                     </div>
                   </div>
                   <textarea
-                    value={repostText}
-                    onChange={(event) => setRepostText(event.target.value)}
-                    placeholder={t("post.actions.repostPlaceholder")}
+                    value={shareText}
+                    onChange={(event) => setShareText(event.target.value)}
+                    placeholder={t("post.actions.sharePlaceholder")}
                     className="mb-4 min-h-28 w-full resize-none rounded-lg border border-border bg-panel px-3 py-3 text-sm text-foreground outline-none focus:border-accent-blue"
                   />
-                  <SharedPostPreview post={post} />
+                  <SharedPostPreview post={post.sharedPost ?? post} />
                 </div>
                 <div className="flex items-center justify-end gap-3 border-t border-border bg-panel/80 px-4 py-3">
-                  <Button type="button" variant="outline" onClick={() => setIsRepostOpen(false)}>
+                  <Button type="button" variant="outline" onClick={() => setIsShareOpen(false)}>
                     {t("common.cancel")}
                   </Button>
-                  <Button type="button" variant="neon-blue" className="gap-2" onClick={submitRepost} disabled={!canInteract || isSharing}>
-                    <Repeat2 className="h-4 w-4" />
-                    {isSharing ? `${t("post.actions.repostSubmit")}...` : t("post.actions.repostSubmit")}
+                  <Button type="button" variant="neon-blue" className="gap-2" onClick={() => void submitShareWithComment()} disabled={!canInteract || isSharing || !shareText.trim()}>
+                    <Share2 className="h-4 w-4" />
+                    {isSharing ? `${t("post.actions.shareSubmit")}...` : t("post.actions.shareSubmit")}
                   </Button>
                 </div>
               </motion.div>
@@ -659,7 +734,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
                     >
                       <option value="VIRAL_BURST">Viral burst</option>
                       <option value="COORDINATED">Coordinated</option>
-                      <option value="CHAIN">Share chain</option>
+                      <option value="CHAIN">Share chain (cây phân nhánh)</option>
                       <option value="ORGANIC">Organic</option>
                     </select>
                   </div>

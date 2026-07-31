@@ -33,6 +33,7 @@
   --radius-sm: 0.5rem;
 }
 
+
 /* =========================================================
    LIGHT MODE
 ========================================================= */
@@ -159,6 +160,10 @@
     scroll-behavior: smooth;
   }
 
+  button:hover{
+    cursor: pointer;
+  }
+  
   body {
     background-color: var(--bg-primary);
     color: var(--text-primary);

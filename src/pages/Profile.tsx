@@ -9,6 +9,7 @@ import type { Post } from "@/mocks/types"
 import { Progress } from "@/components/ui/Progress"
 import { postApi, uploadApi, followApi, type FollowUser } from "@/lib/api"
 import { createStoryHighlight, loadStoryHighlights, removeStoryFromHighlight, removeStoryHighlight, STORY_HIGHLIGHTS_EVENT, type StoryHighlight } from "@/lib/storyHighlights"
+import { formatRelativeStoryTime } from "@/lib/relativeStoryTime"
 import { useAuthStore } from "@/store/useAuthStore"
 import { useThemeStore } from "@/store/useThemeStore"
 import { useLanguageStore } from "@/store/useLanguageStore"
@@ -1271,7 +1272,9 @@ export function Profile() {
                     <p className="text-sm leading-relaxed text-white">{selectedHighlightItem.caption}</p>
                   )}
                   {selectedHighlightItem.createdAt && (
-                    <div className="mt-2 text-xs font-mono text-white/60">{selectedHighlightItem.createdAt}</div>
+                    <div className="mt-2 text-xs font-mono text-white/60">
+                      {formatRelativeStoryTime(selectedHighlightItem.createdAt, t)}
+                    </div>
                   )}
                 </div>
               )}

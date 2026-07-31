@@ -4,6 +4,7 @@ import { Avatar } from "@/components/ui/Avatar"
 import { Button } from "@/components/ui/Button"
 import { friendApi, type FriendUser, type Friendship } from "@/lib/api"
 import { useFriendStore } from "@/store/useFriendStore"
+import { usePresenceStore } from "@/store/usePresenceStore"
 import { cn } from "@/lib/utils"
 import { useTranslation } from "react-i18next"
 
@@ -22,15 +23,24 @@ const avatarFor = (user: FriendUser) => user.avatarUrl || `https://i.pravatar.cc
 interface PersonRowProps {
   user: FriendUser
   subtitle?: string
+  online?: boolean
   children?: ReactNode
 }
 
-function PersonRow({ user, subtitle, children }: PersonRowProps) {
+function PersonRow({ user, subtitle, online, children }: PersonRowProps) {
   return (
     <div className="flex items-center gap-4 p-4 rounded-lg border border-border bg-panel/60">
-      <Avatar src={avatarFor(user)} fallback={user.displayName[0] || "U"} className="h-12 w-12" />
+      <div className="relative shrink-0">
+        <Avatar src={avatarFor(user)} fallback={user.displayName[0] || "U"} className="h-12 w-12" />
+        {online && (
+          <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-panel bg-green-400" />
+        )}
+      </div>
       <div className="min-w-0 flex-1">
-        <div className="font-bold text-foreground truncate">{user.displayName}</div>
+        <div className="flex items-center gap-2">
+          <div className="font-bold text-foreground truncate">{user.displayName}</div>
+          {online && <span className="text-xs font-semibold text-green-400">Online</span>}
+        </div>
         <div className="text-sm text-muted font-mono truncate">{subtitle || makeHandle(user.displayName || user.email)}</div>
       </div>
       {children && <div className="flex items-center gap-2 shrink-0">{children}</div>}
@@ -41,18 +51,19 @@ function PersonRow({ user, subtitle, children }: PersonRowProps) {
 interface FriendshipRowProps {
   friendship: Friendship
   kind: TabId
+  online?: boolean
   onAccept: (id: string) => void
   onDeleteRequest: (id: string) => void
   onRemoveFriend: (id: string) => void
   isBusy: boolean
 }
 
-function FriendshipRow({ friendship, kind, onAccept, onDeleteRequest, onRemoveFriend, isBusy }: FriendshipRowProps) {
+function FriendshipRow({ friendship, kind, online, onAccept, onDeleteRequest, onRemoveFriend, isBusy }: FriendshipRowProps) {
   const { t } = useTranslation()
 
   if (kind === "friends") {
     return (
-      <PersonRow user={friendship.user} subtitle={t("friends.connected")}>
+      <PersonRow user={friendship.user} subtitle={t("friends.connected")} online={online}>
         <Button size="sm" variant="outline" disabled={isBusy} onClick={() => onRemoveFriend(friendship.id)}>
           <UserMinus className="w-4 h-4 mr-2" />
           {t("friends.cancel")}
@@ -98,6 +109,8 @@ export function Friends() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const loadIncomingRequestCount = useFriendStore((state) => state.loadIncomingRequestCount)
+  const onlineIds = usePresenceStore((state) => state.onlineIds)
+  const isFriendOnline = usePresenceStore((state) => state.isOnline)
   const activeList = useMemo(() => {
     if (activeTab === "incoming") return incoming
     if (activeTab === "outgoing") return outgoing
@@ -270,6 +283,7 @@ export function Friends() {
             key={friendship.id}
             friendship={friendship}
             kind={activeTab}
+            online={activeTab === "friends" && (isFriendOnline(friendship.user.id) || onlineIds.has(friendship.user.id))}
             isBusy={busyId === friendship.id}
             onAccept={(id) => runAction(id, () => friendApi.acceptRequest(id))}
             onDeleteRequest={(id) => runAction(id, () => friendApi.deleteRequest(id))}

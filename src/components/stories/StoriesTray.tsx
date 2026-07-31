@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { useAuthStore } from "@/store/useAuthStore"
 import { musicTrackApi, storyApi, uploadApi, type BackendMusicTrack, type BackendStory } from "@/lib/api"
 import { addStoryToHighlight, createStoryHighlight, loadStoryHighlights, STORY_HIGHLIGHTS_EVENT, type StoryHighlight } from "@/lib/storyHighlights"
+import { formatRelativeStoryTime } from "@/lib/relativeStoryTime"
 import type { User } from "@/mocks/types"
 import { useTranslation } from "react-i18next"
 import { optimizeCloudinaryImage } from "@/lib/media"
@@ -30,7 +31,10 @@ interface Story {
   mediaType: StoryMediaType
   mediaDurationMs?: number
   caption: string
+  /** Relative display text (e.g. "5 phút") */
   createdAt: string
+  /** Raw ISO timestamp from API — used when saving to highlights */
+  createdAtIso?: string
   music?: MusicTrack
   musicStartMs?: number
   musicDurationMs?: number
@@ -82,19 +86,6 @@ const formatDuration = (seconds: number) => {
 
 type Translate = ReturnType<typeof useTranslation>["t"]
 
-const relativeStoryTime = (value: string, t: Translate) => {
-  const then = new Date(value).getTime()
-  if (!Number.isFinite(then)) return value
-
-  const diffSeconds = Math.max(0, Math.floor((Date.now() - then) / 1000))
-  if (diffSeconds < 60) return t("stories.time.justNow")
-  const diffMinutes = Math.floor(diffSeconds / 60)
-  if (diffMinutes < 60) return t("stories.time.minute", { count: diffMinutes })
-  const diffHours = Math.floor(diffMinutes / 60)
-  if (diffHours < 24) return t("stories.time.hour", { count: diffHours })
-  return t("stories.time.day", { count: Math.floor(diffHours / 24) })
-}
-
 const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 
 const DEFAULT_IMAGE_STORY_DURATION_MS = 20_000
@@ -122,7 +113,8 @@ const mapBackendStory = (story: BackendStory, currentUserId: string | undefined,
   mediaType: story.media.mediaType === "VIDEO" ? "video" : "image",
   mediaDurationMs: story.media.durationMs,
   caption: story.caption || "",
-  createdAt: relativeStoryTime(story.createdAt, t),
+  createdAt: formatRelativeStoryTime(story.createdAt, t),
+  createdAtIso: story.createdAt,
   music: story.music ? mapMusicTrack(story.music) : undefined,
   musicStartMs: story.musicStartMs,
   musicDurationMs: story.musicDurationMs,
@@ -133,13 +125,13 @@ const mapBackendStory = (story: BackendStory, currentUserId: string | undefined,
     id: viewer.userId,
     username: viewer.displayName,
     avatar: viewer.avatarUrl || `https://i.pravatar.cc/150?u=${encodeURIComponent(viewer.userId)}`,
-    viewedAt: relativeStoryTime(viewer.viewedAt, t),
+    viewedAt: formatRelativeStoryTime(viewer.viewedAt, t),
   })) ?? [],
   reactions: story.reactions?.map((reaction) => ({
     id: reaction.userId,
     username: reaction.displayName,
     avatar: reaction.avatarUrl || `https://i.pravatar.cc/150?u=${encodeURIComponent(reaction.userId)}`,
-    viewedAt: relativeStoryTime(reaction.createdAt, t),
+    viewedAt: formatRelativeStoryTime(reaction.createdAt, t),
     reactionType: reaction.reactionType,
   })) ?? [],
 })
@@ -539,7 +531,7 @@ export function StoriesTray() {
     mediaUrl: story.mediaUrl,
     mediaType: story.mediaType,
     caption: story.caption,
-    createdAt: story.createdAt,
+    createdAt: story.createdAtIso || new Date().toISOString(),
     music: story.music,
     musicStartMs: story.musicStartMs,
     musicDurationMs: story.musicDurationMs,

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { Mail, Lock, Eye, EyeOff, ShieldAlert, LogIn, ArrowRight } from "lucide-react"
+import { Mail, Lock, Eye, EyeOff, ShieldAlert, LogIn, ArrowRight, Ban, X } from "lucide-react"
 import { motion } from "framer-motion"
 import { useAuthStore } from "@/store/useAuthStore"
 import { cn } from "@/lib/utils"
 
 export function Login() {
   const navigate = useNavigate()
-  const { login, error, isLoading, clearError } = useAuthStore()
+  const { login, error, isLoading, clearError, accountLockedReason, clearAccountLocked } = useAuthStore()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -18,12 +18,17 @@ export function Login() {
   useEffect(() => {
     document.title = "Đăng nhập | CyberSocial - Mạng xã hội tin cậy"
     clearError()
-    return () => clearError()
-  }, [clearError])
+    clearAccountLocked()
+    return () => {
+      clearError()
+      clearAccountLocked()
+    }
+  }, [clearError, clearAccountLocked])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setValidationError("")
+    clearAccountLocked()
 
     if (!email) {
       setValidationError("Vui lòng nhập địa chỉ email.")
@@ -34,7 +39,7 @@ export function Login() {
       return
     }
 
-    const success = await login(email, password)
+    const success = await login(email, password, rememberMe)
     if (success) {
       navigate("/")
     }
@@ -196,6 +201,48 @@ export function Login() {
           </div>
         </div>
       </motion.div>
+
+      {accountLockedReason && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={clearAccountLocked} />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="relative w-full max-w-md rounded-2xl border border-danger/40 bg-surface p-6 shadow-2xl"
+          >
+            <button
+              type="button"
+              onClick={clearAccountLocked}
+              className="absolute right-4 top-4 text-muted hover:text-foreground"
+              aria-label="Đóng"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-danger/15 text-danger">
+                <Ban className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1 pr-6">
+                <h3 className="text-lg font-bold text-foreground">Tài khoản của bạn đã bị khóa</h3>
+                <p className="mt-2 text-sm text-muted">
+                  Bạn không thể đăng nhập vào CyberSocial cho đến khi quản trị viên mở khóa tài khoản.
+                </p>
+                <div className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3">
+                  <div className="text-xs font-bold uppercase tracking-wider text-danger/80">Lý do khóa</div>
+                  <p className="mt-1 text-sm font-medium text-foreground whitespace-pre-wrap">{accountLockedReason}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearAccountLocked}
+                  className="mt-5 w-full rounded-xl border border-border bg-panel px-4 py-2.5 text-sm font-bold text-foreground hover:bg-panel-hover transition-colors"
+                >
+                  Đã hiểu
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   )
 }

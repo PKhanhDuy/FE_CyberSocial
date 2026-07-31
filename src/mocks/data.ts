@@ -33,6 +33,8 @@ export const MOCK_POSTS: Post[] = [
     aiAnalysis: {
       riskLevel: "THẤP",
       fakeProbability: 0.02,
+      headline: "Bài này có vẻ đáng tin",
+      contextHints: [],
       reasons: ["Đã kiểm tra chéo với cơ sở dữ liệu thiên văn công cộng", "Chữ ký phương tiện truyền thông xác thực"],
       propagationVelocity: 1.2,
       propagationTimeline: [],
@@ -59,9 +61,16 @@ export const MOCK_POSTS: Post[] = [
     aiAnalysis: {
       riskLevel: "NGHIÊM TRỌNG",
       fakeProbability: 0.94,
+      headline: "Bài này có khả năng cao là tin giả",
+      narrative: "Lan truyền diễn ra rất nhanh ngay sau khi đăng bài. Sau 2 phút, Bot Alpha chia sẻ — tương tác này ảnh hưởng mạnh, khiến hệ thống nghi ngờ bài viết hơn. Tổng cộng 3 tương tác đã được phân tích (mức nghi ngờ 94%).",
+      contextHints: [
+        "Lan truyền diễn ra rất nhanh ngay sau khi đăng bài",
+        "Có nhiều lượt chia sẻ trong thời gian ngắn",
+      ],
+      explanation: "Bài này có khả năng cao là tin giả (94% nghi ngờ). Hệ thống đã phân tích 3 tương tác lan truyền.",
       reasons: [
-        "Chia sẻ bởi Bot Alpha lúc t=+2m tăng xác suất tin giả (TIGE +0.082).",
-        "Bình luận bởi Bot Beta lúc t=+5m tăng xác suất tin giả (TIGE +0.051).",
+        "Sau 2 phút, Bot Alpha chia sẻ — tương tác này ảnh hưởng mạnh, khiến hệ thống nghi ngờ bài viết hơn.",
+        "Sau 5 phút, Bot Beta bình luận — tương tác này ảnh hưởng vừa, khiến hệ thống nghi ngờ bài viết hơn.",
       ],
       propagationVelocity: 45.8,
       propagationTimeline: [
@@ -70,8 +79,8 @@ export const MOCK_POSTS: Post[] = [
         { eventIndex: 2, relativeTime: "t=+5m", eventType: "comment", eventTypeLabel: "Bình luận", actorLabel: "Bot Beta", tigeRemoval: 0.051, isInfluential: true },
       ],
       eventAttributions: [
-        { eventIndex: 1, eventType: "share", eventTypeLabel: "Chia sẻ", relativeTime: "t=+2m", actorLabel: "Bot Alpha", tigeRemoval: 0.082, summary: "Chia sẻ bởi Bot Alpha lúc t=+2m tăng xác suất tin giả (TIGE +0.082)." },
-        { eventIndex: 2, eventType: "comment", eventTypeLabel: "Bình luận", relativeTime: "t=+5m", actorLabel: "Bot Beta", tigeRemoval: 0.051, summary: "Bình luận bởi Bot Beta lúc t=+5m tăng xác suất tin giả (TIGE +0.051)." },
+        { eventIndex: 1, eventType: "share", eventTypeLabel: "Chia sẻ", relativeTime: "t=+2m", actorLabel: "Bot Alpha", tigeRemoval: 0.082, impactLevel: "high", summary: "Sau 2 phút, Bot Alpha chia sẻ — tương tác này ảnh hưởng mạnh, khiến hệ thống nghi ngờ bài viết hơn." },
+        { eventIndex: 2, eventType: "comment", eventTypeLabel: "Bình luận", relativeTime: "t=+5m", actorLabel: "Bot Beta", tigeRemoval: 0.051, impactLevel: "medium", summary: "Sau 5 phút, Bot Beta bình luận — tương tác này ảnh hưởng vừa, khiến hệ thống nghi ngờ bài viết hơn." },
       ],
     }
   },
@@ -95,6 +104,7 @@ export const MOCK_POSTS: Post[] = [
       riskLevel: "THẤP",
       fakeProbability: 0.15,
       reasons: ["Đang quét các tương tác của node..."],
+      contextHints: [],
       propagationVelocity: 0.5,
       propagationTimeline: [],
       eventAttributions: [],
