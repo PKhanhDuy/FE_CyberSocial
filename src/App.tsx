@@ -13,6 +13,7 @@ import { useThemeStore } from "./store/useThemeStore"
 import { useAuthStore } from "./store/useAuthStore"
 import { useFriendStore } from "./store/useFriendStore"
 import { useNotificationStore } from "./store/useNotificationStore"
+import { usePresenceStore } from "./store/usePresenceStore"
 import { AuthGuard, GuestGuard } from "./components/auth/AuthGuard"
 import { AdminGuard } from "./components/auth/AdminGuard"
 import { AdminLayout } from "./components/admin/AdminLayout"
@@ -34,6 +35,8 @@ function App() {
   const refreshCurrentUser = useAuthStore((state) => state.refreshCurrentUser)
   const loadIncomingFriendRequestCount = useFriendStore((state) => state.loadIncomingRequestCount)
   const loadNotifications = useNotificationStore((state) => state.loadNotifications)
+  const startPresence = usePresenceStore((state) => state.start)
+  const stopPresence = usePresenceStore((state) => state.stop)
 
   useEffect(() => {
     if (isDarkMode) {
@@ -49,8 +52,11 @@ function App() {
       loadIncomingFriendRequestCount()
       loadNotifications()
       hydrateTheme()
+      startPresence()
+      return () => stopPresence()
     }
-  }, [hydrateTheme, isAuthenticated, loadIncomingFriendRequestCount, loadNotifications, refreshCurrentUser])
+    stopPresence()
+  }, [hydrateTheme, isAuthenticated, loadIncomingFriendRequestCount, loadNotifications, refreshCurrentUser, startPresence, stopPresence])
 
   return (
     <Router>

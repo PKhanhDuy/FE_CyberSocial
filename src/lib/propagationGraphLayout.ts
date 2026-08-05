@@ -65,14 +65,16 @@ function rootEvent(timeline: PropagationTimelineEvent[]): PropagationTimelineEve
 function hasShareChain(timeline: PropagationTimelineEvent[]): boolean {
   const root = rootEvent(timeline)
   const rootId = eventNodeId(root)
-  const shareIds = new Set(
-    timeline.filter((event) => event.eventType === "share").map((event) => eventNodeId(event)),
-  )
+  const shareEvents = timeline.filter((event) => event.eventType === "share" || event.eventType === "retweet")
+  if (shareEvents.length === 0) return false
 
-  return timeline.some(
+  const maxShareDepth = Math.max(...shareEvents.map((event) => event.depth ?? 1))
+  if (maxShareDepth >= 2) return true
+
+  const shareIds = new Set(shareEvents.map((event) => eventNodeId(event)))
+  return shareEvents.some(
     (event) =>
-      event.eventType === "share"
-      && event.parentEventId
+      event.parentEventId
       && event.parentEventId !== rootId
       && shareIds.has(event.parentEventId),
   )
@@ -202,12 +204,27 @@ function createStarLayout(timeline: PropagationTimelineEvent[]): PropagationGrap
   }
 }
 
+function centerNodesVertically(nodes: PropagationGraphNode[]): void {
+  if (nodes.length === 0) return
+
+  let minY = Infinity
+  let maxY = -Infinity
+  for (const node of nodes) {
+    minY = Math.min(minY, node.position[1])
+    maxY = Math.max(maxY, node.position[1])
+  }
+
+  const centerY = (minY + maxY) / 2
+  for (const node of nodes) {
+    node.position[1] -= centerY
+  }
+}
+
 function buildTreeGraphFromTimeline(timeline: PropagationTimelineEvent[]): PropagationGraphLayout {
   const root = rootEvent(timeline)
   const rootId = eventNodeId(root)
-  const shareEvents = timeline.filter((event) => event.eventType === "share")
-  const rootInteractions = timeline.filter(
-    (event) => event.eventType === "like" || event.eventType === "comment",
+  const shareEvents = timeline.filter(
+    (event) => event.eventType === "share" || event.eventType === "retweet",
   )
 
   const childrenByParent = new Map<string, PropagationTimelineEvent[]>()
@@ -220,8 +237,9 @@ function buildTreeGraphFromTimeline(timeline: PropagationTimelineEvent[]): Propa
 
   const nodes: PropagationGraphNode[] = []
   const edges: PropagationGraphEdge[] = []
-  const levelHeight = 2.2
+  const levelHeight = 2.4
   const maxDepth = Math.max(1, ...shareEvents.map((event) => event.depth ?? 1))
+  const horizontalSpan = Math.max(8, Math.min(16, shareEvents.length * 0.45))
 
   nodes.push({
     id: rootId,
@@ -251,7 +269,8 @@ function buildTreeGraphFromTimeline(timeline: PropagationTimelineEvent[]): Propa
       const childId = eventNodeId(child)
       const x = spanStart + (width * (index + 1)) / (children.length + 1)
       const y = parentPosition[1] - levelHeight
-      const position: [number, number, number] = [x, y, depth * 0.2]
+      const zigzag = children.length === 1 ? (depth % 2 === 0 ? 0.9 : -0.9) : 0
+      const position: [number, number, number] = [x + zigzag, y, depth * 0.35]
       nodes.push({
         id: childId,
         label: child.actorLabel,
@@ -260,7 +279,7 @@ function buildTreeGraphFromTimeline(timeline: PropagationTimelineEvent[]): Propa
         isShareBranch: true,
         position,
         radius: 0.14 + (child.isInfluential ? 0.06 : 0),
-        eventType: "share",
+        eventType: child.eventType,
         depth: child.depth ?? depth,
         maxTige: child.tigeRemoval ?? null,
       })
@@ -268,7 +287,7 @@ function buildTreeGraphFromTimeline(timeline: PropagationTimelineEvent[]): Propa
         id: `edge:${child.eventIndex}`,
         from: parentId,
         to: childId,
-        eventType: "share",
+        eventType: child.eventType,
         isInfluential: child.isInfluential,
         isBranchEdge: true,
       })
@@ -279,37 +298,9 @@ function buildTreeGraphFromTimeline(timeline: PropagationTimelineEvent[]): Propa
     })
   }
 
-  assignShareSubtree(rootId, nodes[0].position, 1, -6, 6)
+  assignShareSubtree(rootId, nodes[0].position, 1, -horizontalSpan / 2, horizontalSpan / 2)
 
-  rootInteractions.forEach((event, index) => {
-    const nodeId = eventNodeId(event)
-    const angle = (index / Math.max(rootInteractions.length, 1)) * Math.PI * 2
-    const radius = 1.4
-    nodes.push({
-      id: nodeId,
-      label: event.actorLabel,
-      isRoot: false,
-      isInfluential: event.isInfluential,
-      isShareBranch: false,
-      position: [
-        nodes[0].position[0] + Math.cos(angle) * radius,
-        nodes[0].position[1] + 0.2,
-        nodes[0].position[2] + Math.sin(angle) * radius,
-      ],
-      radius: 0.09,
-      eventType: event.eventType,
-      depth: 0,
-      maxTige: event.tigeRemoval ?? null,
-    })
-    edges.push({
-      id: `edge:${event.eventIndex}`,
-      from: rootId,
-      to: nodeId,
-      eventType: event.eventType,
-      isInfluential: event.isInfluential,
-      isBranchEdge: false,
-    })
-  })
+  centerNodesVertically(nodes)
 
   return {
     mode: "tree",

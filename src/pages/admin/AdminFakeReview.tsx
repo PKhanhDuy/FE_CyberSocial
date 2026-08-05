@@ -1,14 +1,18 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Zap } from "lucide-react"
 import { adminApi, type AdminFakePost, type AdminVerdictDecision } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/Button"
-import { PageHeader, AdminCard, RiskBadge } from "@/components/admin/AdminBits"
+import { PageHeader, AdminCard, AdminPagination, RiskBadge } from "@/components/admin/AdminBits"
 import { AdminReasonModal } from "@/components/admin/AdminReasonModal"
+import { AdminPostPreviewModal } from "@/components/admin/AdminPostPreviewModal"
+import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
+import type { Post } from "@/mocks/types"
 
 const CONFIRM_REASONS = ["Sai sự thật", "Chưa kiểm chứng", "Gây hiểu nhầm"]
 const REJECT_REASONS = ["AI nhận định sai", "Nguồn đã xác thực", "Nội dung châm biếm/giải trí"]
+const FAKE_POSTS_PAGE_SIZE = 15
 
 const riskTone: Record<string, string> = { HIGH: "text-danger", MEDIUM: "text-warning", LOW: "text-success" }
 const stripeTone: Record<string, string> = { HIGH: "bg-danger", MEDIUM: "bg-warning", LOW: "bg-success" }
@@ -17,12 +21,22 @@ type Pending = { decision: AdminVerdictDecision; post: AdminFakePost } | null
 
 export function AdminFakeReview() {
   const queryClient = useQueryClient()
+  const [page, setPage] = useState(0)
+  const [pendingOnly, setPendingOnly] = useState(false)
   const [pending, setPending] = useState<Pending>(null)
   const [error, setError] = useState<string | null>(null)
+  const [viewingPostId, setViewingPostId] = useState<string | null>(null)
+  const [analysisPost, setAnalysisPost] = useState<Post | null>(null)
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["admin-fake-posts"],
-    queryFn: () => adminApi.listFakePosts({ size: 50 }),
+  useEffect(() => {
+    setPage(0)
+  }, [pendingOnly])
+
+  const reviewedParam = pendingOnly ? false : undefined
+
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["admin-fake-posts", page, pendingOnly],
+    queryFn: () => adminApi.listFakePosts({ page, size: FAKE_POSTS_PAGE_SIZE, reviewed: reviewedParam }),
   })
 
   const mutation = useMutation({
@@ -45,78 +59,112 @@ export function AdminFakeReview() {
         description="Duyệt bài bị AI gán nhãn nghi vấn. Xác nhận (dán nhãn cảnh báo công khai) hoặc bác bỏ nhãn."
       />
 
-      <div className="space-y-4">
-        {isLoading && <AdminCard className="p-8 text-center text-muted">Đang tải…</AdminCard>}
+      <AdminCard>
+        <div className="flex items-center justify-end border-b border-border px-4 py-3">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={pendingOnly}
+              onChange={(event) => setPendingOnly(event.target.checked)}
+              className="h-4 w-4 rounded border-border accent-accent-blue"
+            />
+            Chưa duyệt
+          </label>
+        </div>
+
+        {isLoading && <div className="p-8 text-center text-muted">Đang tải…</div>}
         {!isLoading && posts.length === 0 && (
-          <AdminCard className="p-8 text-center text-muted">Không có bài nào bị gắn nhãn tin giả.</AdminCard>
+          <div className="p-8 text-center text-muted">
+            {pendingOnly ? "Không có tin nào chờ duyệt." : "Không có bài nào bị gắn nhãn tin giả."}
+          </div>
         )}
-        {posts.map((post) => {
-          const level = post.riskLevel ?? "MEDIUM"
-          const pct = Math.round((post.fakeProbability ?? 0) * 100)
-          return (
-            <div key={post.postId} className="flex overflow-hidden rounded-xl border border-border bg-panel">
-              <div className={cn("w-1.5 flex-none", stripeTone[level])} />
-              <div className="flex-1 p-4">
-                <div className="mb-2 flex flex-wrap items-center gap-3">
-                  <span className={cn("font-mono text-lg font-bold", riskTone[level])}>{pct}%</span>
-                  <RiskBadge risk={level} probability={post.fakeProbability} />
-                  <span className="rounded border border-danger/40 px-2 py-0.5 font-mono text-xs text-danger">
-                    {post.label ?? "FAKE"}
-                  </span>
-                  {post.publicLabel && (
-                    <span className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning">
-                      Đã dán nhãn công khai
-                    </span>
-                  )}
-                  {post.adminDecision === "REJECT_LABEL" && (
-                    <span className="rounded-full bg-success/15 px-2 py-0.5 text-xs font-semibold text-success">
-                      Đã bác bỏ nhãn
-                    </span>
-                  )}
-                  {post.reviewedAt && (
-                    <span className="ml-auto text-xs text-muted">
-                      duyệt {new Date(post.reviewedAt).toLocaleString("vi-VN")}
-                    </span>
-                  )}
-                </div>
+        {!isLoading && posts.length > 0 && (
+          <div className="space-y-4 p-4">
+            {posts.map((post) => {
+              const level = post.riskLevel ?? "MEDIUM"
+              const pct = Math.round((post.fakeProbability ?? 0) * 100)
+              return (
+                <div key={post.postId} className="flex overflow-hidden rounded-xl border border-border bg-background">
+                  <div className={cn("w-1.5 flex-none", stripeTone[level])} />
+                  <div className="flex-1 p-4">
+                    <div className="mb-2 flex flex-wrap items-center gap-3">
+                      <span className={cn("font-mono text-lg font-bold", riskTone[level])}>{pct}%</span>
+                      <RiskBadge risk={level} probability={post.fakeProbability} />
+                      <span className="rounded border border-danger/40 px-2 py-0.5 font-mono text-xs text-danger">
+                        {post.label ?? "FAKE"}
+                      </span>
+                      {post.publicLabel && (
+                        <span className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning">
+                          Đã dán nhãn công khai
+                        </span>
+                      )}
+                      {post.adminDecision === "REJECT_LABEL" && (
+                        <span className="rounded-full bg-success/15 px-2 py-0.5 text-xs font-semibold text-success">
+                          Đã bác bỏ nhãn
+                        </span>
+                      )}
+                      {post.reviewedAt && (
+                        <span className="ml-auto text-xs text-muted">
+                          duyệt {new Date(post.reviewedAt).toLocaleString("vi-VN")}
+                        </span>
+                      )}
+                    </div>
 
-                <p className="mb-3 text-sm text-foreground">
-                  "{post.contentPreview}" — <span className="text-muted">{post.authorDisplayName}</span>
-                </p>
+                    <p className="mb-3 text-sm text-foreground">
+                      "{post.contentPreview}" — <span className="text-muted">{post.authorDisplayName}</span>
+                    </p>
 
-                <div className="mb-3 flex items-center gap-2 text-xs text-muted">
-                  <Zap className="h-3.5 w-3.5 text-accent-blue" />
-                  Phân tích TGNN{" "}
-                  {post.lastAnalyzedAt && `· ${new Date(post.lastAnalyzedAt).toLocaleDateString("vi-VN")}`}
-                </div>
+                    <div className="mb-3 flex items-center gap-2 text-xs text-muted">
+                      <Zap className="h-3.5 w-3.5 text-accent-blue" />
+                      Phân tích TGNN{" "}
+                      {post.lastAnalyzedAt && `· ${new Date(post.lastAnalyzedAt).toLocaleDateString("vi-VN")}`}
+                    </div>
 
-                <div className="flex items-center justify-end gap-2 border-t border-dashed border-border pt-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setError(null)
-                      setPending({ decision: "REJECT_LABEL", post })
-                    }}
-                  >
-                    Bác bỏ nhãn
-                  </Button>
-                  <Button
-                    variant="neon-pink"
-                    size="sm"
-                    onClick={() => {
-                      setError(null)
-                      setPending({ decision: "CONFIRM_FAKE", post })
-                    }}
-                  >
-                    Xác nhận tin giả
-                  </Button>
+                    <div className="flex items-center justify-end gap-2 border-t border-dashed border-border pt-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setViewingPostId(post.postId)}
+                      >
+                        Xem
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setError(null)
+                          setPending({ decision: "REJECT_LABEL", post })
+                        }}
+                      >
+                        Bác bỏ nhãn
+                      </Button>
+                      <Button
+                        variant="neon-pink"
+                        size="sm"
+                        onClick={() => {
+                          setError(null)
+                          setPending({ decision: "CONFIRM_FAKE", post })
+                        }}
+                      >
+                        Xác nhận tin giả
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+              )
+            })}
+          </div>
+        )}
+
+        <AdminPagination
+          page={data?.page ?? page}
+          totalPages={data?.totalPages ?? 0}
+          totalElements={data?.totalElements ?? 0}
+          pageSize={FAKE_POSTS_PAGE_SIZE}
+          onPageChange={setPage}
+          disabled={isLoading || isFetching}
+        />
+      </AdminCard>
 
       <AdminReasonModal
         open={pending?.decision === "CONFIRM_FAKE"}
@@ -149,6 +197,16 @@ export function AdminFakeReview() {
           pending && mutation.mutate({ postId: pending.post.postId, decision: "REJECT_LABEL", note })
         }
       />
+
+      <AdminPostPreviewModal
+        postId={viewingPostId}
+        onClose={() => setViewingPostId(null)}
+        onViewAnalysis={setAnalysisPost}
+      />
+
+      {analysisPost && (
+        <AIAnalysisModal post={analysisPost} onClose={() => setAnalysisPost(null)} />
+      )}
     </div>
   )
 }

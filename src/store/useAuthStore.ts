@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import { authApi, clearAuthStorage, userApi } from "@/lib/api"
+import { ApiError, authApi, clearAuthStorage, userApi } from "@/lib/api"
 import type { User } from "@/mocks/types"
 
 export type { User } from "@/mocks/types"
@@ -9,7 +9,8 @@ interface AuthState {
   isAuthenticated: boolean
   isLoading: boolean
   error: string | null
-  login: (email: string, password: string) => Promise<boolean>
+  accountLockedReason: string | null
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>
   register: (username: string, email: string, password: string) => Promise<boolean>
   forgotPassword: (email: string) => Promise<boolean>
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>
@@ -19,6 +20,7 @@ interface AuthState {
   updateAvatar: (avatarUrl: string) => Promise<boolean>
   updateCover: (coverUrl: string) => Promise<boolean>
   clearError: () => void
+  clearAccountLocked: () => void
 }
 
 const getStoredAuth = () => {
@@ -44,15 +46,27 @@ export const useAuthStore = create<AuthState>((set) => {
     ...initialAuth,
     isLoading: false,
     error: null,
+    accountLockedReason: null,
 
-    login: async (email, password) => {
-      set({ isLoading: true, error: null })
+    login: async (email, password, rememberMe = false) => {
+      set({ isLoading: true, error: null, accountLockedReason: null })
       try {
-        const user = await authApi.login(email, password)
+        const user = await authApi.login(email, password, rememberMe)
         set({ user, isAuthenticated: true, isLoading: false })
         return true
       } catch (error) {
-        set({ error: error instanceof Error ? error.message : "Dang nhap that bai", isLoading: false })
+        if (error instanceof ApiError && error.code === "ACCOUNT_LOCKED") {
+          set({
+            accountLockedReason: error.reason || "Không có lý do được cung cấp.",
+            error: null,
+            isLoading: false,
+          })
+          return false
+        }
+        set({
+          error: error instanceof Error ? error.message : "Đăng nhập thất bại",
+          isLoading: false,
+        })
         return false
       }
     },
@@ -64,7 +78,7 @@ export const useAuthStore = create<AuthState>((set) => {
         set({ user, isAuthenticated: true, isLoading: false })
         return true
       } catch (error) {
-        set({ error: error instanceof Error ? error.message : "Dang ky that bai", isLoading: false })
+        set({ error: error instanceof Error ? error.message : "Đăng ký thất bại", isLoading: false })
         return false
       }
     },
@@ -73,7 +87,7 @@ export const useAuthStore = create<AuthState>((set) => {
       set({ isLoading: true, error: null })
       const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
       if (!isValidEmail) {
-        set({ error: "Email khong hop le", isLoading: false })
+        set({ error: "Email không hợp lệ", isLoading: false })
         return false
       }
 
@@ -82,7 +96,7 @@ export const useAuthStore = create<AuthState>((set) => {
         set({ isLoading: false })
         return true
       } catch (error) {
-        set({ error: error instanceof Error ? error.message : "Gui yeu cau that bai", isLoading: false })
+        set({ error: error instanceof Error ? error.message : "Gửi yêu cầu thất bại", isLoading: false })
         return false
       }
     },
@@ -94,14 +108,14 @@ export const useAuthStore = create<AuthState>((set) => {
         set({ isLoading: false })
         return true
       } catch (error) {
-        set({ error: error instanceof Error ? error.message : "Doi mat khau that bai", isLoading: false })
+        set({ error: error instanceof Error ? error.message : "Đổi mật khẩu thất bại", isLoading: false })
         return false
       }
     },
 
     logout: async () => {
       await authApi.logout()
-      set({ user: null, isAuthenticated: false, error: null })
+      set({ user: null, isAuthenticated: false, error: null, accountLockedReason: null })
     },
 
     refreshCurrentUser: async () => {
@@ -121,7 +135,7 @@ export const useAuthStore = create<AuthState>((set) => {
         set({ user, isLoading: false })
         return true
       } catch (error) {
-        set({ error: error instanceof Error ? error.message : "Cap nhat ho so that bai", isLoading: false })
+        set({ error: error instanceof Error ? error.message : "Cập nhật hồ sơ thất bại", isLoading: false })
         return false
       }
     },
@@ -133,7 +147,7 @@ export const useAuthStore = create<AuthState>((set) => {
         set({ user, isLoading: false })
         return true
       } catch (error) {
-        set({ error: error instanceof Error ? error.message : "Cap nhat anh dai dien that bai", isLoading: false })
+        set({ error: error instanceof Error ? error.message : "Cập nhật ảnh đại diện thất bại", isLoading: false })
         return false
       }
     },
@@ -145,11 +159,12 @@ export const useAuthStore = create<AuthState>((set) => {
         set({ user, isLoading: false })
         return true
       } catch (error) {
-        set({ error: error instanceof Error ? error.message : "Cap nhat anh bia that bai", isLoading: false })
+        set({ error: error instanceof Error ? error.message : "Cập nhật ảnh bìa thất bại", isLoading: false })
         return false
       }
     },
 
     clearError: () => set({ error: null }),
+    clearAccountLocked: () => set({ accountLockedReason: null }),
   }
 })

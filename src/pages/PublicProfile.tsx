@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { Activity, Briefcase, Cake, GraduationCap, Globe, Heart, Languages, Link as LinkIcon, MapPin, ShieldCheck, UserCheck, UserCircle, UserPlus } from "lucide-react"
+import { Activity, Briefcase, Cake, Clock, GraduationCap, Globe, Heart, Languages, Link as LinkIcon, MapPin, ShieldCheck, UserCheck, UserCircle, UserPlus, Users } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
 import { PostCard } from "@/components/feed/PostCard"
 import { cn } from "@/lib/utils"
-import { followApi, postApi, userApi } from "@/lib/api"
+import { followApi, friendApi, postApi, userApi, type FriendshipState } from "@/lib/api"
 import type { Post, User } from "@/mocks/types"
 import { useAuthStore } from "@/store/useAuthStore"
 import { optimizeCloudinaryImage } from "@/lib/media"
@@ -27,6 +27,10 @@ export function PublicProfile() {
   const [isFollowing, setIsFollowing] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
   const [followerCount, setFollowerCount] = useState(0)
+  const [friendState, setFriendState] = useState<FriendshipState>("NONE")
+  const [friendshipId, setFriendshipId] = useState<string | undefined>(undefined)
+  const [friendLoading, setFriendLoading] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const tabs = [
     { id: "activity", label: t("profile.activity"), icon: Activity },
@@ -47,16 +51,19 @@ export function PublicProfile() {
       setIsLoading(true)
       setError(null)
       try {
-        const [user, userPosts, followersCount, followStatus] = await Promise.all([
+        const [user, userPosts, followersCount, followStatus, friendship] = await Promise.all([
           userApi.get(userId),
           postApi.byAuthor(userId),
           followApi.countFollowers(userId),
           followApi.isFollowing(userId),
+          friendApi.status(userId),
         ])
         setProfile(user)
         setPosts(userPosts.content)
         setFollowerCount(followersCount.count)
         setIsFollowing(followStatus.following)
+        setFriendState(friendship.state)
+        setFriendshipId(friendship.friendshipId)
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "Khong tai duoc ho so")
       } finally {
@@ -71,6 +78,7 @@ export function PublicProfile() {
     if (!userId || followLoading) return
 
     setFollowLoading(true)
+    setActionError(null)
     try {
       if (isFollowing) {
         await followApi.cancelFollow(userId)
@@ -82,11 +90,63 @@ export function PublicProfile() {
         setFollowerCount((current) => current + 1)
       }
     } catch (toggleError) {
-      setError(toggleError instanceof Error ? toggleError.message : "Khong cap nhat duoc trang thai theo doi")
+      setActionError(toggleError instanceof Error ? toggleError.message : "Khong cap nhat duoc trang thai theo doi")
     } finally {
       setFollowLoading(false)
     }
   }
+
+  const handleFriendAction = async () => {
+    if (!userId || friendLoading) return
+
+    setFriendLoading(true)
+    setActionError(null)
+    try {
+      if (friendState === "NONE") {
+        const friendship = await friendApi.sendRequest(userId)
+        setFriendState(friendship.status === "ACCEPTED" ? "FRIENDS" : "PENDING_OUTGOING")
+        setFriendshipId(friendship.id)
+      } else if (friendState === "PENDING_OUTGOING" && friendshipId) {
+        await friendApi.deleteRequest(friendshipId)
+        setFriendState("NONE")
+        setFriendshipId(undefined)
+      } else if (friendState === "PENDING_INCOMING" && friendshipId) {
+        const friendship = await friendApi.acceptRequest(friendshipId)
+        setFriendState("FRIENDS")
+        setFriendshipId(friendship.id)
+      } else if (friendState === "FRIENDS" && friendshipId) {
+        await friendApi.removeFriend(friendshipId)
+        setFriendState("NONE")
+        setFriendshipId(undefined)
+      }
+    } catch (friendError) {
+      setActionError(friendError instanceof Error ? friendError.message : "Khong cap nhat duoc trang thai ban be")
+    } finally {
+      setFriendLoading(false)
+    }
+  }
+
+  const friendButton = {
+    NONE: { label: t("profile.addFriend"), icon: UserPlus, hint: undefined, active: false },
+    PENDING_OUTGOING: {
+      label: t("profile.friendRequestSent"),
+      icon: Clock,
+      hint: t("profile.cancelFriendRequestHint"),
+      active: true,
+    },
+    PENDING_INCOMING: {
+      label: t("profile.acceptFriendRequest"),
+      icon: UserCheck,
+      hint: undefined,
+      active: false,
+    },
+    FRIENDS: {
+      label: t("profile.friends"),
+      icon: Users,
+      hint: t("profile.removeFriendHint"),
+      active: true,
+    },
+  }[friendState]
 
   const renderInfoRow = (label: string, value: unknown, icon: ReactNode) => {
     const displayValue = Array.isArray(value) ? value.join(", ") : value
@@ -150,30 +210,54 @@ export function PublicProfile() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleFollowToggle}
-              disabled={followLoading}
-              className={cn(
-                "h-11 px-5 rounded-lg border text-sm font-bold tracking-wider transition-colors flex items-center gap-2",
-                isFollowing
-                  ? "border-accent-blue/40 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/20"
-                  : "border-accent-blue bg-accent-blue text-black hover:bg-accent-blue/90"
-              )}
-            >
-              {isFollowing ? (
-                <>
-                  <UserCheck className="w-4 h-4" />
-                  {t("profile.following")}
-                </>
-              ) : (
-                <>
-                  <UserPlus className="w-4 h-4" />
-                  {t("profile.follow")}
-                </>
-              )}
-            </button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleFriendAction}
+                disabled={friendLoading}
+                title={friendButton.hint}
+                className={cn(
+                  "h-11 px-5 rounded-lg border text-sm font-bold tracking-wider transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed",
+                  friendButton.active
+                    ? "border-accent-pink/40 bg-accent-pink/10 text-accent-pink hover:bg-accent-pink/20"
+                    : "border-accent-pink bg-accent-pink text-black hover:bg-accent-pink/90"
+                )}
+              >
+                <friendButton.icon className="w-4 h-4" />
+                {friendButton.label}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleFollowToggle}
+                disabled={followLoading}
+                className={cn(
+                  "h-11 px-5 rounded-lg border text-sm font-bold tracking-wider transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed",
+                  isFollowing
+                    ? "border-accent-blue/40 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/20"
+                    : "border-accent-blue bg-accent-blue text-black hover:bg-accent-blue/90"
+                )}
+              >
+                {isFollowing ? (
+                  <>
+                    <UserCheck className="w-4 h-4" />
+                    {t("profile.following")}
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-4 h-4" />
+                    {t("profile.follow")}
+                  </>
+                )}
+              </button>
+            </div>
           </div>
+
+          {actionError && (
+            <div className="mb-4 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-foreground">
+              {actionError}
+            </div>
+          )}
 
           <div className="space-y-4">
             <div>

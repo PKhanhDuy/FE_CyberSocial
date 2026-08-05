@@ -187,7 +187,7 @@ export function PropagationGraphScene({
 
   return (
     <div className="w-full h-full absolute inset-0">
-      <Canvas camera={{ position: [0, layout.mode === "tree" ? 2 : 0, cameraDistance], fov: 55 }}>
+      <Canvas camera={{ position: [0, 0, cameraDistance], fov: 55 }}>
         <color attach="background" args={["#050508"]} />
         <ambientLight intensity={0.45} />
         <pointLight position={[8, 8, 10]} intensity={1.2} color={isSuspicious ? "#2dd4bf" : "#38bdf8"} />
@@ -195,6 +195,7 @@ export function PropagationGraphScene({
         <Stars radius={80} depth={40} count={2500} factor={3} saturation={0} fade speed={0.6} />
         <PropagationGraph layout={layout} isSuspicious={isSuspicious} />
         <OrbitControls
+          target={[0, 0, 0]}
           enableZoom
           enablePan
           autoRotate={layout.mode === "star" && layout.nodes.length > 1}

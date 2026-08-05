@@ -1,12 +1,17 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { adminApi, type AdminPost } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/Button"
-import { PageHeader, AdminCard, StatusPill } from "@/components/admin/AdminBits"
+import { PageHeader, AdminCard, AdminPagination, StatusPill } from "@/components/admin/AdminBits"
 import { AdminReasonModal } from "@/components/admin/AdminReasonModal"
+import { AdminPostPreviewModal } from "@/components/admin/AdminPostPreviewModal"
+import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
+import type { Post } from "@/mocks/types"
 
 type HiddenFilter = "all" | "visible" | "hidden"
+
+const POSTS_PAGE_SIZE = 15
 
 const HIDE_REASONS = ["Ngôn từ thù ghét", "Bạo lực", "Bản quyền", "Thông tin sai lệch"]
 const DELETE_REASONS = ["Vi phạm nghiêm trọng", "Nội dung bất hợp pháp", "Tin giả đã xác nhận"]
@@ -22,14 +27,21 @@ export function AdminPosts() {
   const queryClient = useQueryClient()
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<HiddenFilter>("all")
+  const [page, setPage] = useState(0)
   const [pending, setPending] = useState<Pending>(null)
   const [error, setError] = useState<string | null>(null)
+  const [viewingPostId, setViewingPostId] = useState<string | null>(null)
+  const [analysisPost, setAnalysisPost] = useState<Post | null>(null)
 
   const hiddenParam = filter === "all" ? undefined : filter === "hidden"
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["admin-posts", query, filter],
-    queryFn: () => adminApi.listPosts({ query, hidden: hiddenParam, size: 50 }),
+  useEffect(() => {
+    setPage(0)
+  }, [query, filter])
+
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["admin-posts", query, filter, page],
+    queryFn: () => adminApi.listPosts({ query, hidden: hiddenParam, page, size: POSTS_PAGE_SIZE }),
   })
 
   const invalidate = () => {
@@ -54,6 +66,7 @@ export function AdminPosts() {
       invalidate()
       setPending(null)
       setError(null)
+      setViewingPostId(null)
     },
     onError: (err) => setError(err instanceof Error ? err.message : "Xóa thất bại"),
   })
@@ -129,6 +142,13 @@ export function AdminPosts() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setViewingPostId(post.id)}
+                        >
+                          Xem
+                        </Button>
                         {post.hidden ? (
                           <Button
                             variant="outline"
@@ -173,6 +193,15 @@ export function AdminPosts() {
             </tbody>
           </table>
         </div>
+
+        <AdminPagination
+          page={data?.page ?? page}
+          totalPages={data?.totalPages ?? 0}
+          totalElements={data?.totalElements ?? 0}
+          pageSize={POSTS_PAGE_SIZE}
+          onPageChange={setPage}
+          disabled={isLoading || isFetching}
+        />
       </AdminCard>
 
       <AdminReasonModal
@@ -207,6 +236,16 @@ export function AdminPosts() {
           pending?.kind === "delete" && deleteMutation.mutate({ postId: pending.post.id, reason })
         }
       />
+
+      <AdminPostPreviewModal
+        postId={viewingPostId}
+        onClose={() => setViewingPostId(null)}
+        onViewAnalysis={setAnalysisPost}
+      />
+
+      {analysisPost && (
+        <AIAnalysisModal post={analysisPost} onClose={() => setAnalysisPost(null)} />
+      )}
     </div>
   )
 }

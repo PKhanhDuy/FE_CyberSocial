@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/Button"
 
 export function PageHeader({
   title,
@@ -93,4 +94,67 @@ export function RiskBadge({ risk, probability }: { risk?: string; probability?: 
 
 export function AdminCard({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn("rounded-xl border border-border bg-panel", className)}>{children}</div>
+}
+
+export function AdminPagination({
+  page,
+  totalPages,
+  totalElements,
+  pageSize,
+  onPageChange,
+  disabled = false,
+}: {
+  page: number
+  totalPages: number
+  totalElements: number
+  pageSize: number
+  onPageChange: (page: number) => void
+  disabled?: boolean
+}) {
+  if (totalElements === 0) {
+    return null
+  }
+
+  const from = page * pageSize + 1
+  const to = Math.min((page + 1) * pageSize, totalElements)
+  const canPrev = page > 0
+  const canNext = page < totalPages - 1
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3">
+      <p className="text-sm text-muted">
+        Hiển thị{" "}
+        <span className="font-mono text-foreground">
+          {from}–{to}
+        </span>{" "}
+        /{" "}
+        <span className="font-mono text-foreground">{totalElements}</span>
+        {" · "}
+        Trang{" "}
+        <span className="font-mono text-foreground">{page + 1}</span>
+        {" / "}
+        <span className="font-mono text-foreground">{Math.max(totalPages, 1)}</span>
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled || !canPrev}
+          onClick={() => onPageChange(page - 1)}
+        >
+          Trước
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled || !canNext}
+          onClick={() => onPageChange(page + 1)}
+        >
+          Sau
+        </Button>
+      </div>
+    </div>
+  )
 }

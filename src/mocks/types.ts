@@ -22,6 +22,7 @@ export interface User {
   hobbies?: string[]
   links?: string[]
   isOnline?: boolean
+  enabled?: boolean
 }
 
 export interface Post {
@@ -37,6 +38,8 @@ export interface Post {
   aiState: AIState
   aiAnalysis?: AIAnalysis
   sharedPost?: Post
+  /** Share record id when this post is a repost; used for propagation chain */
+  viaShareId?: string
 }
 
 export interface PropagationTimelineEvent {
@@ -49,8 +52,11 @@ export interface PropagationTimelineEvent {
   eventTypeLabel: string
   actorLabel: string
   tigeRemoval?: number | null
+  conditionalTige?: number | null
   isInfluential: boolean
 }
+
+export type ImpactLevel = "high" | "medium" | "low"
 
 export interface EventAttribution {
   eventIndex: number
@@ -60,12 +66,18 @@ export interface EventAttribution {
   actorLabel?: string
   tigeRemoval?: number | null
   confidenceDrop?: number | null
+  conditionalTige?: number | null
   summary?: string
+  impactLevel?: ImpactLevel | null
 }
 
 export interface AIAnalysis {
   riskLevel: 'THẤP' | 'TRUNG BÌNH' | 'CAO' | 'NGHIÊM TRỌNG'
   fakeProbability: number
+  headline?: string
+  narrative?: string
+  contextHints: string[]
+  explanation?: string
   reasons: string[]
   propagationVelocity: number // nodes per second
   propagationTimeline: PropagationTimelineEvent[]

@@ -30,6 +30,7 @@ export interface BackendUser {
   avatarUrl?: string
   coverUrl?: string
   role: "USER" | "ADMIN"
+  enabled?: boolean
   themePreference: "LIGHT" | "DARK" | "SYSTEM"
   createdAt: string
   updatedAt: string
@@ -51,6 +52,7 @@ export interface BackendPost {
   visibility: "PUBLIC" | "PRIVATE"
   mediaUrls: string[]
   sharedPost?: BackendPost
+  viaShareId?: string | null
   likeCount: number
   commentCount: number
   shareCount: number
@@ -82,6 +84,8 @@ export interface BackendPostShare {
 
 export type PostVerificationStatus = "PENDING" | "ANALYZING" | "COMPLETED" | "FAILED"
 
+export type ImpactLevel = "high" | "medium" | "low"
+
 export interface BackendEventAttribution {
   eventIndex: number
   eventType: string
@@ -90,7 +94,9 @@ export interface BackendEventAttribution {
   actorLabel?: string
   tigeRemoval?: number | null
   confidenceDrop?: number | null
+  conditionalTige?: number | null
   summary?: string
+  impactLevel?: ImpactLevel | null
 }
 
 export interface BackendPropagationTimelineEvent {
@@ -103,6 +109,7 @@ export interface BackendPropagationTimelineEvent {
   eventTypeLabel: string
   actorLabel: string
   tigeRemoval?: number | null
+  conditionalTige?: number | null
   influential: boolean
 }
 
@@ -119,10 +126,15 @@ export interface BackendPostVerification {
   totalInteractions: number
   nextThreshold: number
   explanation?: string
+  headline?: string
+  narrative?: string
+  contextHints?: string[]
   eventAttributions?: BackendEventAttribution[]
   propagationTimeline?: BackendPropagationTimelineEvent[]
   lastAnalyzedAt?: string
   updatedAt?: string
+  publicLabel?: boolean
+  interactionsLocked?: boolean
 }
 
 export interface PostVerification {
@@ -138,10 +150,15 @@ export interface PostVerification {
   totalInteractions: number
   nextThreshold: number
   explanation?: string
+  headline?: string
+  narrative?: string
+  contextHints?: string[]
   eventAttributions: BackendEventAttribution[]
   propagationTimeline: BackendPropagationTimelineEvent[]
   lastAnalyzedAt?: string
   updatedAt?: string
+  publicLabel?: boolean
+  interactionsLocked?: boolean
 }
 
 export type DemoPropagationPattern = "ORGANIC" | "VIRAL_BURST" | "COORDINATED" | "CHAIN"
@@ -278,6 +295,13 @@ export interface Friendship {
   updatedAt: string
 }
 
+export type FriendshipState = "NONE" | "PENDING_OUTGOING" | "PENDING_INCOMING" | "FRIENDS"
+
+export interface FriendshipStateResult {
+  state: FriendshipState
+  friendshipId?: string
+}
+
 export interface FollowUser {
   id: string
   email: string
@@ -334,6 +358,7 @@ export type MessageSocketEvent =
       messageId: string
       reaction?: null
       userId?: null
+      online?: null
     }
   | {
       type: "REACTION_UPDATED"
@@ -342,6 +367,7 @@ export type MessageSocketEvent =
       messageId: string
       reaction: MessageReaction
       userId: string
+      online?: null
     }
   | {
       type: "REACTION_DELETED"
@@ -350,6 +376,16 @@ export type MessageSocketEvent =
       messageId: string
       reaction?: null
       userId: string
+      online?: null
+    }
+  | {
+      type: "PRESENCE_UPDATED"
+      conversationId?: null
+      message?: null
+      messageId?: null
+      reaction?: null
+      userId: string
+      online: boolean
     }
 
 export interface MessageConversation {
@@ -382,6 +418,7 @@ export interface AppPost {
   isLiked?: boolean
   aiState: "monitoring" | "suspicious" | "verified"
   sharedPost?: AppPost
+  viaShareId?: string
 }
 
 export const getAccessToken = () => {
@@ -416,6 +453,12 @@ export const createMessageSocket = (onEvent: (event: MessageSocketEvent) => void
   return socket
 }
 
+export const presenceApi = {
+  async listOnlineFriends() {
+    return apiRequest<string[]>("/api/presence/friends")
+  },
+}
+
 const setAccessToken = (token: string) => {
   window.localStorage.setItem(ACCESS_TOKEN_KEY, token)
 }
@@ -429,12 +472,32 @@ export const storeAuthUser = (user: User) => {
   window.localStorage.setItem(USER_KEY, JSON.stringify(user))
 }
 
-const parseErrorMessage = async (response: Response) => {
+export class ApiError extends Error {
+  code?: string
+  reason?: string
+
+  constructor(message: string, code?: string, reason?: string) {
+    super(message)
+    this.name = "ApiError"
+    this.code = code
+    this.reason = reason
+  }
+}
+
+const parseApiError = async (response: Response) => {
   try {
-    const body = await response.json()
-    return body.message ?? body.error ?? "Request failed"
+    const body = await response.json() as {
+      message?: string
+      error?: string
+      data?: { code?: string; reason?: string | null }
+    }
+    return new ApiError(
+      body.message ?? body.error ?? "Request failed",
+      body.data?.code,
+      body.data?.reason ?? undefined,
+    )
   } catch {
-    return "Request failed"
+    return new ApiError("Request failed")
   }
 }
 
@@ -481,12 +544,14 @@ async function apiRequest<T>(path: string, init: RequestInit = {}, retry = true)
   }
 
   if (!response.ok) {
-    throw new Error(await parseErrorMessage(response))
+    throw await parseApiError(response)
   }
 
   const body = (await response.json()) as ApiResponse<T>
   if (!body.success) {
-    throw new Error(body.message)
+    throw new ApiError(body.message, body.data && typeof body.data === "object" && "code" in (body.data as object)
+      ? String((body.data as { code?: string }).code)
+      : undefined)
   }
   return body.data
 }
@@ -502,19 +567,20 @@ export const mapUser = (user: BackendUser): User => ({
   role: user.role,
   isVerified: user.role === "ADMIN",
   trustScore: user.role === "ADMIN" ? 98 : 80,
-  bio: "Thanh vien CyberSocial.",
+  bio: "Thành viên CyberSocial.",
+  enabled: user.enabled ?? true,
 })
 
 const relativeTime = (value: string) => {
   const then = new Date(value).getTime()
   const diffSeconds = Math.max(0, Math.floor((Date.now() - then) / 1000))
-  if (diffSeconds < 60) return "vua xong"
+  if (diffSeconds < 60) return "Vừa xong"
   const diffMinutes = Math.floor(diffSeconds / 60)
-  if (diffMinutes < 60) return `${diffMinutes} phut truoc`
+  if (diffMinutes < 60) return `${diffMinutes} phút trước`
   const diffHours = Math.floor(diffMinutes / 60)
-  if (diffHours < 24) return `${diffHours} gio truoc`
+  if (diffHours < 24) return `${diffHours} giờ trước`
   const diffDays = Math.floor(diffHours / 24)
-  return `${diffDays} ngay truoc`
+  return `${diffDays} ngày trước`
 }
 
 export const mapPost = (post: BackendPost): AppPost => ({
@@ -536,6 +602,7 @@ export const mapPost = (post: BackendPost): AppPost => ({
   isLiked: post.likedByCurrentUser ?? false,
   aiState: "monitoring",
   sharedPost: post.sharedPost ? mapPost(post.sharedPost) : undefined,
+  viaShareId: post.viaShareId ?? undefined,
 })
 
 export const mapVerifiedPost = (post: BackendPost): AppPost => ({
@@ -568,10 +635,15 @@ export const mapPostVerification = (verification: BackendPostVerification): Post
   totalInteractions: verification.totalInteractions ?? 0,
   nextThreshold: verification.nextThreshold ?? 0,
   explanation: verification.explanation,
+  headline: verification.headline,
+  narrative: verification.narrative,
+  contextHints: verification.contextHints ?? [],
   eventAttributions: verification.eventAttributions ?? [],
   propagationTimeline: verification.propagationTimeline ?? [],
   lastAnalyzedAt: verification.lastAnalyzedAt,
   updatedAt: verification.updatedAt,
+  publicLabel: verification.publicLabel ?? false,
+  interactionsLocked: verification.interactionsLocked ?? false,
 })
 
 const mapNotificationType = (type: BackendNotification["type"]): NotificationType => {
@@ -582,10 +654,10 @@ const mapNotificationType = (type: BackendNotification["type"]): NotificationTyp
 }
 
 export const authApi = {
-  async login(email: string, password: string) {
+  async login(email: string, password: string, rememberMe = false) {
     const auth = await apiRequest<AuthResponse>("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, rememberMe }),
     })
     setAccessToken(auth.accessToken)
     const user = mapUser(auth.user)
@@ -687,6 +759,10 @@ export const postApi = {
       ...response,
       content: response.content.map(mapPost),
     }
+  },
+
+  async get(postId: string) {
+    return mapPost(await apiRequest<BackendPost>(`/api/posts/${postId}`))
   },
 
   async listVerified(page = 0, size = 20) {
@@ -923,6 +999,13 @@ export const adminApi = {
     return apiRequest<PagedResponse<AdminUser>>(`/api/admin/users${suffix}`)
   },
 
+  async createAdminUser(payload: { email: string; displayName: string; password: string }) {
+    return apiRequest<AdminUser>("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
+  },
+
   async updateUserStatus(userId: string, enabled: boolean, reason?: string, note?: string) {
     return apiRequest<AdminUser>(`/api/admin/users/${userId}/status`, {
       method: "PATCH",
@@ -940,10 +1023,11 @@ export const adminApi = {
     return apiRequest<PagedResponse<AdminPost>>(`/api/admin/posts${suffix}`)
   },
 
-  async listFakePosts(params?: { page?: number; size?: number }) {
+  async listFakePosts(params?: { page?: number; size?: number; reviewed?: boolean }) {
     const search = new URLSearchParams()
     if (params?.page !== undefined) search.set("page", String(params.page))
     if (params?.size !== undefined) search.set("size", String(params.size))
+    if (params?.reviewed !== undefined) search.set("reviewed", String(params.reviewed))
     const suffix = search.toString() ? `?${search.toString()}` : ""
     return apiRequest<PagedResponse<AdminFakePost>>(`/api/admin/posts/fake${suffix}`)
   },
@@ -1036,6 +1120,10 @@ export const friendApi = {
       size: String(size),
     })
     return apiRequest<PagedResponse<FriendUser>>(`/api/friends/search?${params.toString()}`)
+  },
+
+  async status(userId: string) {
+    return apiRequest<FriendshipStateResult>(`/api/friends/status/${userId}`)
   },
 
   async sendRequest(userId: string) {
@@ -1202,6 +1290,7 @@ export const notificationApi = {
       title: notification.title,
       message: notification.message,
       timestamp: relativeTime(notification.createdAt),
+      createdAt: notification.createdAt,
       isRead: notification.read,
       source: "CyberSocial Backend",
     }))
@@ -1217,6 +1306,7 @@ export const notificationApi = {
       title: notification.title,
       message: notification.message,
       timestamp: relativeTime(notification.createdAt),
+      createdAt: notification.createdAt,
       isRead: notification.read,
       source: "CyberSocial Backend",
     }
