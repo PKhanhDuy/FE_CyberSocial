@@ -16,7 +16,7 @@ export function Login() {
 
   // Update document title for SEO
   useEffect(() => {
-    document.title = "Đăng nhập | CyberSocial - Mạng xã hội tin cậy"
+    document.title = "CyberSocial - Mạng xã hội tin cậy"
     clearError()
     clearAccountLocked()
     return () => {

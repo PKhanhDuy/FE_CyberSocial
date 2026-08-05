@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Zap } from "lucide-react"
 import { adminApi, type AdminFakePost, type AdminVerdictDecision } from "@/lib/api"
@@ -22,14 +22,21 @@ type Pending = { decision: AdminVerdictDecision; post: AdminFakePost } | null
 export function AdminFakeReview() {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(0)
+  const [pendingOnly, setPendingOnly] = useState(false)
   const [pending, setPending] = useState<Pending>(null)
   const [error, setError] = useState<string | null>(null)
   const [viewingPostId, setViewingPostId] = useState<string | null>(null)
   const [analysisPost, setAnalysisPost] = useState<Post | null>(null)
 
+  useEffect(() => {
+    setPage(0)
+  }, [pendingOnly])
+
+  const reviewedParam = pendingOnly ? false : undefined
+
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ["admin-fake-posts", page],
-    queryFn: () => adminApi.listFakePosts({ page, size: FAKE_POSTS_PAGE_SIZE }),
+    queryKey: ["admin-fake-posts", page, pendingOnly],
+    queryFn: () => adminApi.listFakePosts({ page, size: FAKE_POSTS_PAGE_SIZE, reviewed: reviewedParam }),
   })
 
   const mutation = useMutation({
@@ -53,9 +60,23 @@ export function AdminFakeReview() {
       />
 
       <AdminCard>
+        <div className="flex items-center justify-end border-b border-border px-4 py-3">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={pendingOnly}
+              onChange={(event) => setPendingOnly(event.target.checked)}
+              className="h-4 w-4 rounded border-border accent-accent-blue"
+            />
+            Chưa duyệt
+          </label>
+        </div>
+
         {isLoading && <div className="p-8 text-center text-muted">Đang tải…</div>}
         {!isLoading && posts.length === 0 && (
-          <div className="p-8 text-center text-muted">Không có bài nào bị gắn nhãn tin giả.</div>
+          <div className="p-8 text-center text-muted">
+            {pendingOnly ? "Không có tin nào chờ duyệt." : "Không có bài nào bị gắn nhãn tin giả."}
+          </div>
         )}
         {!isLoading && posts.length > 0 && (
           <div className="space-y-4 p-4">

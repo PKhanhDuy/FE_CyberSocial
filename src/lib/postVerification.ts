@@ -7,6 +7,13 @@ const RISK_LABELS: Record<string, AIAnalysis["riskLevel"]> = {
   HIGH: "CAO",
 }
 
+export function isInteractionsLocked(verification: PostVerification | null): boolean {
+  if (!verification) return false
+  if (verification.interactionsLocked != null) return verification.interactionsLocked
+  if (verification.status !== "COMPLETED" || verification.label !== "FAKE") return false
+  return true
+}
+
 export function resolveAiState(verification: PostVerification | null): AIState {
   if (!verification || verification.status === "PENDING" || verification.status === "ANALYZING" || verification.status === "FAILED") {
     return "monitoring"

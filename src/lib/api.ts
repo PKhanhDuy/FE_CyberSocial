@@ -133,6 +133,8 @@ export interface BackendPostVerification {
   propagationTimeline?: BackendPropagationTimelineEvent[]
   lastAnalyzedAt?: string
   updatedAt?: string
+  publicLabel?: boolean
+  interactionsLocked?: boolean
 }
 
 export interface PostVerification {
@@ -155,6 +157,8 @@ export interface PostVerification {
   propagationTimeline: BackendPropagationTimelineEvent[]
   lastAnalyzedAt?: string
   updatedAt?: string
+  publicLabel?: boolean
+  interactionsLocked?: boolean
 }
 
 export type DemoPropagationPattern = "ORGANIC" | "VIRAL_BURST" | "COORDINATED" | "CHAIN"
@@ -289,6 +293,13 @@ export interface Friendship {
   user: FriendUser
   createdAt: string
   updatedAt: string
+}
+
+export type FriendshipState = "NONE" | "PENDING_OUTGOING" | "PENDING_INCOMING" | "FRIENDS"
+
+export interface FriendshipStateResult {
+  state: FriendshipState
+  friendshipId?: string
 }
 
 export interface FollowUser {
@@ -631,6 +642,8 @@ export const mapPostVerification = (verification: BackendPostVerification): Post
   propagationTimeline: verification.propagationTimeline ?? [],
   lastAnalyzedAt: verification.lastAnalyzedAt,
   updatedAt: verification.updatedAt,
+  publicLabel: verification.publicLabel ?? false,
+  interactionsLocked: verification.interactionsLocked ?? false,
 })
 
 const mapNotificationType = (type: BackendNotification["type"]): NotificationType => {
@@ -986,6 +999,13 @@ export const adminApi = {
     return apiRequest<PagedResponse<AdminUser>>(`/api/admin/users${suffix}`)
   },
 
+  async createAdminUser(payload: { email: string; displayName: string; password: string }) {
+    return apiRequest<AdminUser>("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
+  },
+
   async updateUserStatus(userId: string, enabled: boolean, reason?: string, note?: string) {
     return apiRequest<AdminUser>(`/api/admin/users/${userId}/status`, {
       method: "PATCH",
@@ -1003,10 +1023,11 @@ export const adminApi = {
     return apiRequest<PagedResponse<AdminPost>>(`/api/admin/posts${suffix}`)
   },
 
-  async listFakePosts(params?: { page?: number; size?: number }) {
+  async listFakePosts(params?: { page?: number; size?: number; reviewed?: boolean }) {
     const search = new URLSearchParams()
     if (params?.page !== undefined) search.set("page", String(params.page))
     if (params?.size !== undefined) search.set("size", String(params.size))
+    if (params?.reviewed !== undefined) search.set("reviewed", String(params.reviewed))
     const suffix = search.toString() ? `?${search.toString()}` : ""
     return apiRequest<PagedResponse<AdminFakePost>>(`/api/admin/posts/fake${suffix}`)
   },
@@ -1099,6 +1120,10 @@ export const friendApi = {
       size: String(size),
     })
     return apiRequest<PagedResponse<FriendUser>>(`/api/friends/search?${params.toString()}`)
+  },
+
+  async status(userId: string) {
+    return apiRequest<FriendshipStateResult>(`/api/friends/status/${userId}`)
   },
 
   async sendRequest(userId: string) {

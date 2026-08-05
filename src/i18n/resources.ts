@@ -74,6 +74,7 @@ export const resources = {
           sharePlaceholder: "Bạn muốn nói gì về bài viết này?",
           shareSubmit: "Chia sẻ",
           justNow: "Vừa xong",
+          interactionsLocked: "Bài viết đã bị gắn nhãn tin giả — không thể tương tác.",
         }
       },
       stories: {
@@ -212,6 +213,12 @@ export const resources = {
         follow: "Theo dõi",
         following: "Đang theo dõi",
         unfollow: "Bỏ theo dõi",
+        addFriend: "Thêm bạn bè",
+        friends: "Bạn bè",
+        friendRequestSent: "Đã gửi lời mời",
+        acceptFriendRequest: "Chấp nhận lời mời",
+        cancelFriendRequestHint: "Nhấn để hủy lời mời kết bạn",
+        removeFriendHint: "Nhấn để hủy kết bạn",
         noFollowers: "Chưa có ai theo dõi bạn.",
         noFollowing: "Bạn chưa theo dõi ai.",
         trustRate: "Chỉ số tin cậy",
@@ -448,6 +455,7 @@ export const resources = {
           sharePlaceholder: "What do you want to say about this post?",
           shareSubmit: "Share",
           justNow: "Just now",
+          interactionsLocked: "This post is labeled as fake news — interactions are disabled.",
         }
       },
       stories: {
@@ -589,6 +597,12 @@ export const resources = {
         follow: "Follow",
         following: "Following",
         unfollow: "Unfollow",
+        addFriend: "Add friend",
+        friends: "Friends",
+        friendRequestSent: "Request sent",
+        acceptFriendRequest: "Accept request",
+        cancelFriendRequestHint: "Click to cancel the friend request",
+        removeFriendHint: "Click to remove this friend",
         noFollowers: "No followers yet.",
         noFollowing: "You are not following anyone yet.",
         trustRate: "Trust Rate",

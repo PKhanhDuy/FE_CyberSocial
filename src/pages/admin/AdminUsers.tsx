@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Search } from "lucide-react"
+import { Search, ShieldPlus } from "lucide-react"
 import { adminApi, type AdminUser } from "@/lib/api"
 import { useAuthStore } from "@/store/useAuthStore"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/Button"
 import { PageHeader, AdminCard, AdminPagination, StatusPill } from "@/components/admin/AdminBits"
 import { AdminReasonModal } from "@/components/admin/AdminReasonModal"
+import { AdminCreateUserModal } from "@/components/admin/AdminCreateUserModal"
 
 type StatusFilter = "all" | "active" | "locked"
 
@@ -30,6 +31,8 @@ export function AdminUsers() {
   const [page, setPage] = useState(0)
   const [target, setTarget] = useState<AdminUser | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
   const enabledParam = status === "all" ? undefined : status === "active"
 
@@ -52,6 +55,18 @@ export function AdminUsers() {
       setError(null)
     },
     onError: (err) => setError(err instanceof Error ? err.message : "Thao tác thất bại"),
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (payload: { email: string; displayName: string; password: string }) =>
+      adminApi.createAdminUser(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] })
+      queryClient.invalidateQueries({ queryKey: ["admin-stats"] })
+      setIsCreateOpen(false)
+      setCreateError(null)
+    },
+    onError: (err) => setCreateError(err instanceof Error ? err.message : "Tạo tài khoản thất bại"),
   })
 
   const users = data?.content ?? []
@@ -89,6 +104,18 @@ export function AdminUsers() {
               </button>
             ))}
           </div>
+          <Button
+            variant="neon-blue"
+            size="sm"
+            className="gap-2"
+            onClick={() => {
+              setCreateError(null)
+              setIsCreateOpen(true)
+            }}
+          >
+            <ShieldPlus className="h-4 w-4" />
+            Tạo tài khoản admin
+          </Button>
         </div>
 
         <div className="overflow-x-auto">
@@ -208,6 +235,14 @@ export function AdminUsers() {
         onConfirm={(reason) =>
           target && mutation.mutate({ userId: target.id, enabled: false, reason })
         }
+      />
+
+      <AdminCreateUserModal
+        open={isCreateOpen}
+        loading={createMutation.isPending}
+        error={createError}
+        onCancel={() => setIsCreateOpen(false)}
+        onConfirm={(payload) => createMutation.mutate(payload)}
       />
     </div>
   )

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { Link } from "react-router-dom"
 import { Check, Search, UserMinus, UserPlus, Users, X } from "lucide-react"
 import { Avatar } from "@/components/ui/Avatar"
 import { Button } from "@/components/ui/Button"
 import { friendApi, type FriendUser, type Friendship } from "@/lib/api"
+import { useAuthStore } from "@/store/useAuthStore"
 import { useFriendStore } from "@/store/useFriendStore"
 import { usePresenceStore } from "@/store/usePresenceStore"
 import { cn } from "@/lib/utils"
@@ -28,21 +30,31 @@ interface PersonRowProps {
 }
 
 function PersonRow({ user, subtitle, online, children }: PersonRowProps) {
+  const currentUser = useAuthStore((state) => state.user)
+  const profilePath = currentUser?.id === user.id ? "/profile" : `/users/${user.id}`
+
   return (
     <div className="flex items-center gap-4 p-4 rounded-lg border border-border bg-panel/60">
-      <div className="relative shrink-0">
-        <Avatar src={avatarFor(user)} fallback={user.displayName[0] || "U"} className="h-12 w-12" />
-        {online && (
-          <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-panel bg-green-400" />
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <div className="font-bold text-foreground truncate">{user.displayName}</div>
-          {online && <span className="text-xs font-semibold text-green-400">Online</span>}
+      <Link
+        to={profilePath}
+        className="flex min-w-0 flex-1 items-center gap-4 rounded-lg transition-colors hover:bg-panel-hover focus:outline-none focus:ring-2 focus:ring-accent-blue"
+      >
+        <div className="relative shrink-0">
+          <Avatar src={avatarFor(user)} fallback={user.displayName[0] || "U"} className="h-12 w-12" />
+          {online && (
+            <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-panel bg-green-400" />
+          )}
         </div>
-        <div className="text-sm text-muted font-mono truncate">{subtitle || makeHandle(user.displayName || user.email)}</div>
-      </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <div className="font-bold text-foreground truncate hover:text-accent-blue transition-colors">
+              {user.displayName}
+            </div>
+            {online && <span className="text-xs font-semibold text-green-400">Online</span>}
+          </div>
+          <div className="text-sm text-muted font-mono truncate">{subtitle || makeHandle(user.displayName || user.email)}</div>
+        </div>
+      </Link>
       {children && <div className="flex items-center gap-2 shrink-0">{children}</div>}
     </div>
   )

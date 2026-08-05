@@ -14,7 +14,7 @@ import { useAuthStore } from "@/store/useAuthStore"
 import { useTranslation } from "react-i18next"
 import { optimizeCloudinaryImage } from "@/lib/media"
 import { usePostVerification } from "@/hooks/usePostVerification"
-import { buildPostWithVerification, resolvePostTrustScore } from "@/lib/postVerification"
+import { buildPostWithVerification, isInteractionsLocked, resolvePostTrustScore } from "@/lib/postVerification"
 
 interface PostCardProps {
   post: Post
@@ -118,8 +118,9 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
     pattern: "VIRAL_BURST" as DemoPropagationPattern,
   })
   const { t } = useTranslation()
+  const contentPostId = post.sharedPost?.id ?? post.id
   const totalInteractions = likeCount + commentCount + shareCount
-  const { verification, refetch: refetchVerification } = usePostVerification(post.id, totalInteractions)
+  const { verification, refetch: refetchVerification } = usePostVerification(contentPostId, totalInteractions)
   const displayPost = useMemo(
     () => buildPostWithVerification(
       {
@@ -162,10 +163,12 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
             : t("post.isMonitoring")
   const authorAvatar = currentUser?.id === post.author.id ? currentUser.avatar : post.author.avatar
   const authorProfilePath = currentUser?.id === post.author.id ? "/profile" : `/users/${post.author.id}`
-  const canInteract = Boolean(currentUser)
+  const interactionsLocked = isInteractionsLocked(verification)
+  const canInteract = Boolean(currentUser) && !interactionsLocked
+  const lockedTitle = t("post.actions.interactionsLocked")
 
   const toggleLike = async () => {
-    if (isSavingLike) return
+    if (isSavingLike || interactionsLocked) return
 
     const nextLiked = !isLiked
     const previousLiked = isLiked
@@ -215,6 +218,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
   }
 
   const toggleComments = async () => {
+    if (interactionsLocked) return
     const nextOpen = !isCommentsOpen
     setIsCommentsOpen(nextOpen)
     if (!nextOpen || hasLoadedComments || isLoadingComments) return
@@ -230,7 +234,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
   const submitComment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const text = commentDraft.trim()
-    if (!text || isSubmittingComment) return
+    if (!text || isSubmittingComment || interactionsLocked) return
 
     setIsSubmittingComment(true)
     setActionError(null)
@@ -250,7 +254,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
   }
 
   const submitShare = async (content: string) => {
-    if (!currentUser || !onRepostCreated || isSharing) return
+    if (!currentUser || !onRepostCreated || isSharing || interactionsLocked) return
 
     setIsSharing(true)
     setActionError(null)
@@ -281,6 +285,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
   }
 
   const copyPostLink = async () => {
+    if (interactionsLocked) return
     const postId = post.sharedPost?.id ?? post.id
     const url = `${window.location.origin}/?post=${postId}`
     setActionError(null)
@@ -485,6 +490,12 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
           </div>
         )}
 
+        {interactionsLocked && (
+          <div className="mb-4 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">
+            {lockedTitle}
+          </div>
+        )}
+
         <div className="flex justify-between items-center text-muted pt-4 border-t border-border">
           <button
             type="button"
@@ -495,7 +506,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
               isLiked ? "text-accent-pink" : "hover:text-accent-pink"
             )}
             aria-pressed={isLiked}
-            title={isLiked ? t("post.actions.unlike") : t("post.actions.like")}
+            title={interactionsLocked ? lockedTitle : isLiked ? t("post.actions.unlike") : t("post.actions.like")}
           >
             <Heart className={cn("w-5 h-5 group-hover:scale-110 transition-transform", isLiked && "fill-current")} />
             <span className="text-sm">{likeCount.toLocaleString()}</span>
@@ -503,12 +514,13 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
           <button
             type="button"
             onClick={toggleComments}
+            disabled={interactionsLocked}
             className={cn(
-              "flex items-center gap-2 transition-colors group",
+              "flex items-center gap-2 transition-colors group disabled:cursor-not-allowed disabled:opacity-50",
               isCommentsOpen ? "text-accent-blue" : "hover:text-accent-blue"
             )}
             aria-expanded={isCommentsOpen}
-            title={t("post.actions.comment")}
+            title={interactionsLocked ? lockedTitle : t("post.actions.comment")}
           >
             <MessageSquare className="w-5 h-5 group-hover:scale-110 transition-transform" />
             <span className="text-sm">{commentCount.toLocaleString()}</span>
@@ -518,7 +530,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
             onClick={() => void submitInstantRepost()}
             disabled={!canInteract || !onRepostCreated || isSharing}
             className="flex items-center gap-2 hover:text-green-400 transition-colors group disabled:cursor-not-allowed disabled:opacity-50"
-            title={t("post.actions.repost")}
+            title={interactionsLocked ? lockedTitle : t("post.actions.repost")}
           >
             <Repeat2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
             <span className="text-sm">{shareCount.toLocaleString()}</span>
@@ -526,12 +538,13 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
           <button
             type="button"
             onClick={() => {
+              if (interactionsLocked) return
               setActionError(null)
               setIsShareOpen(true)
             }}
             disabled={!canInteract || !onRepostCreated || isSharing}
             className="flex items-center gap-2 hover:text-accent-blue transition-colors group disabled:cursor-not-allowed disabled:opacity-50"
-            title={t("post.actions.share")}
+            title={interactionsLocked ? lockedTitle : t("post.actions.share")}
           >
             <Share2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
           </button>
@@ -540,7 +553,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
             onClick={() => void copyPostLink()}
             disabled={!canInteract}
             className="flex items-center gap-2 hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-            title={t("post.actions.copyLink")}
+            title={interactionsLocked ? lockedTitle : t("post.actions.copyLink")}
           >
             <Link2 className="w-5 h-5" />
           </button>
@@ -610,7 +623,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
                     disabled={isLoadingComments}
                     className="w-full rounded-lg border border-border bg-panel/60 px-3 py-2 text-sm font-semibold text-accent-blue transition-colors hover:bg-panel-hover disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {isLoadingComments ? t("post.actions.loadingComments") : "Xem them binh luan"}
+                    {isLoadingComments ? t("post.actions.loadingComments") : "Xem thêm bình luận"}
                   </button>
                 )}
                 <form onSubmit={submitComment} className="flex items-center gap-2 pt-1">
@@ -619,11 +632,12 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
                     value={commentDraft}
                     onChange={(event) => setCommentDraft(event.target.value)}
                     placeholder={t("post.actions.commentPlaceholder")}
-                    className="h-10 flex-1 rounded-lg border border-border bg-panel px-3 text-sm text-foreground outline-none focus:border-accent-blue"
+                    disabled={interactionsLocked}
+                    className="h-10 flex-1 rounded-lg border border-border bg-panel px-3 text-sm text-foreground outline-none focus:border-accent-blue disabled:cursor-not-allowed disabled:opacity-50"
                   />
                   <button
                     type="submit"
-                    disabled={!commentDraft.trim() || isSubmittingComment}
+                    disabled={!commentDraft.trim() || isSubmittingComment || interactionsLocked}
                     className="h-10 w-10 rounded-lg border border-accent-blue/40 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/20 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center transition-colors"
                     title={t("post.actions.postComment")}
                   >
