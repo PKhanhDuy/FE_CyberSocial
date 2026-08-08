@@ -4,6 +4,8 @@ import { Mail, Lock, User, Eye, EyeOff, ShieldAlert, Check, ArrowRight } from "l
 import { motion } from "framer-motion"
 import { useAuthStore } from "@/store/useAuthStore"
 import { cn } from "@/lib/utils"
+import { PasswordRequirements } from "@/components/auth/PasswordRequirements"
+import { isStrongPassword } from "@/lib/passwordPolicy"
 
 export function Register() {
   const navigate = useNavigate()
@@ -39,8 +41,8 @@ export function Register() {
       setValidationError("Vui lòng đặt Mật mã xác thực.")
       return
     }
-    if (password.length < 8) {
-      setValidationError("Mật mã phải chứa ít nhất 6 ký tự.")
+    if (!isStrongPassword(password)) {
+      setValidationError("Mật khẩu chưa đủ mạnh. Cần ít nhất 8 ký tự, gồm chữ hoa, chữ thường, số và ký tự đặc biệt.")
       return
     }
     if (password !== confirmPassword) {
@@ -171,6 +173,7 @@ export function Register() {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+              <PasswordRequirements password={password} className="mt-2 rounded-lg border border-border/60 bg-panel/40 p-3" />
             </div>
 
             {/* Confirm Password Field */}

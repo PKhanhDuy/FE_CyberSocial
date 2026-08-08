@@ -20,7 +20,7 @@ const TABS: Array<{ id: TabId; labelKey: string }> = [
 
 const makeHandle = (value: string) => `@${value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")}`
 
-const avatarFor = (user: FriendUser) => user.avatarUrl || `https://i.pravatar.cc/150?u=${encodeURIComponent(user.email || user.id)}`
+const avatarFor = (user: FriendUser) => user.avatarUrl || `https://i.pravatar.cc/150?u=${encodeURIComponent(user.id)}`
 
 interface PersonRowProps {
   user: FriendUser
@@ -52,7 +52,7 @@ function PersonRow({ user, subtitle, online, children }: PersonRowProps) {
             </div>
             {online && <span className="text-xs font-semibold text-green-400">Online</span>}
           </div>
-          <div className="text-sm text-muted font-mono truncate">{subtitle || makeHandle(user.displayName || user.email)}</div>
+          <div className="text-sm text-muted font-mono truncate">{subtitle || makeHandle(user.displayName)}</div>
         </div>
       </Link>
       {children && <div className="flex items-center gap-2 shrink-0">{children}</div>}

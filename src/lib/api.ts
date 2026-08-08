@@ -277,7 +277,6 @@ export type FriendshipStatus = "PENDING" | "ACCEPTED"
 
 export interface FriendUser {
   id: string
-  email: string
   displayName: string
   avatarUrl?: string
   coverUrl?: string

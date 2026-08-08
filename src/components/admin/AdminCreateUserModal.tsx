@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import { ShieldPlus, X } from "lucide-react"
 import { Button } from "@/components/ui/Button"
+import { PasswordRequirements } from "@/components/auth/PasswordRequirements"
+import { isStrongPassword } from "@/lib/passwordPolicy"
 
 export interface AdminCreateUserModalProps {
   open: boolean
@@ -10,7 +12,7 @@ export interface AdminCreateUserModalProps {
   onConfirm: (payload: { email: string; displayName: string; password: string }) => void
 }
 
-const MIN_PASSWORD_LENGTH = 8
+const WEAK_PASSWORD_MESSAGE = "Mật khẩu chưa đủ mạnh. Cần ít nhất 8 ký tự, gồm chữ hoa, chữ thường, số và ký tự đặc biệt."
 
 export function AdminCreateUserModal({
   open,
@@ -61,8 +63,8 @@ export function AdminCreateUserModal({
       setValidationError("Tên hiển thị phải có ít nhất 2 ký tự.")
       return
     }
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      setValidationError(`Mật khẩu phải có ít nhất ${MIN_PASSWORD_LENGTH} ký tự.`)
+    if (!isStrongPassword(password)) {
+      setValidationError(WEAK_PASSWORD_MESSAGE)
       return
     }
     if (password !== confirmPassword) {
@@ -132,9 +134,10 @@ export function AdminCreateUserModal({
               value={password}
               autoComplete="new-password"
               onChange={(event) => setPassword(event.target.value)}
-              placeholder={`Tối thiểu ${MIN_PASSWORD_LENGTH} ký tự`}
+              placeholder="Mật khẩu mạnh"
               className="w-full rounded-lg border border-border bg-panel px-3 py-2 text-sm text-foreground focus:border-accent-blue focus:outline-none"
             />
+            <PasswordRequirements password={password} className="mt-2 rounded-lg border border-border/60 bg-panel/40 p-3" />
           </div>
 
           <div>
