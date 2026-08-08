@@ -5,6 +5,8 @@ import { motion } from "framer-motion"
 import { useTranslation } from "react-i18next"
 import { useAuthStore } from "@/store/useAuthStore"
 import { cn } from "@/lib/utils"
+import { PasswordRequirements } from "@/components/auth/PasswordRequirements"
+import { isStrongPassword } from "@/lib/passwordPolicy"
 
 type PasswordField = "current" | "next" | "confirm"
 
@@ -49,7 +51,7 @@ export function ChangePassword() {
       setValidationError(t("auth.changePassword.validation.newRequired"))
       return
     }
-    if (newPassword.length < 8) {
+    if (!isStrongPassword(newPassword)) {
       setValidationError(t("auth.changePassword.validation.minLength"))
       return
     }
@@ -169,6 +171,7 @@ export function ChangePassword() {
           <form onSubmit={handleSubmit} className="space-y-5">
             {renderPasswordInput("current-password", t("auth.changePassword.currentPassword"), currentPassword, "current", setCurrentPassword)}
             {renderPasswordInput("new-password", t("auth.changePassword.newPassword"), newPassword, "next", setNewPassword)}
+            <PasswordRequirements password={newPassword} className="rounded-lg border border-border/60 bg-panel/40 p-3" />
             {renderPasswordInput("confirm-password", t("auth.changePassword.confirmPassword"), confirmPassword, "confirm", setConfirmPassword)}
 
             <div className="flex flex-col sm:flex-row gap-3 pt-2">

@@ -88,6 +88,7 @@ function SharedPostPreview({ post }: { post: Post }) {
 
 export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProps) {
   const currentUser = useAuthStore((state) => state.user)
+  const isAdmin = currentUser?.role === "ADMIN"
   const [isLiked, setIsLiked] = useState(Boolean(post.isLiked))
   const [likeCount, setLikeCount] = useState(post.likes)
   const [commentCount, setCommentCount] = useState(post.comments)
@@ -375,15 +376,17 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
               <span className="font-mono text-[10px] text-muted">{interactionProgress}%</span>
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => setIsDemoOpen(true)}
-            className="inline-flex h-8 items-center gap-2 rounded-lg border border-accent-blue/40 bg-accent-blue/10 px-3 text-xs font-bold text-accent-blue transition-colors hover:bg-accent-blue/20"
-            title="Demo propagation"
-          >
-            <FlaskConical className="h-4 w-4" />
-            Demo
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setIsDemoOpen(true)}
+              className="inline-flex h-8 items-center gap-2 rounded-lg border border-accent-blue/40 bg-accent-blue/10 px-3 text-xs font-bold text-accent-blue transition-colors hover:bg-accent-blue/20"
+              title="Demo propagation"
+            >
+              <FlaskConical className="h-4 w-4" />
+              Demo
+            </button>
+          )}
         </div>
       </div>
 
@@ -710,7 +713,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
 
       {typeof document !== "undefined" && createPortal(
         <AnimatePresence>
-          {isDemoOpen && (
+          {isAdmin && isDemoOpen && (
             <motion.div
               className="fixed inset-0 z-[10000] flex items-center justify-center bg-background/85 p-4 backdrop-blur-sm"
               initial={{ opacity: 0 }}

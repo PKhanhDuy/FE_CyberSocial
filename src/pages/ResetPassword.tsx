@@ -5,6 +5,8 @@ import { motion } from "framer-motion"
 import { useTranslation } from "react-i18next"
 import { authApi } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { PasswordRequirements } from "@/components/auth/PasswordRequirements"
+import { isStrongPassword } from "@/lib/passwordPolicy"
 
 type PasswordField = "next" | "confirm"
 
@@ -80,7 +82,7 @@ export function ResetPassword() {
       setValidationError(t("auth.resetPassword.validation.newRequired"))
       return
     }
-    if (newPassword.length < 8) {
+    if (!isStrongPassword(newPassword)) {
       setValidationError(t("auth.resetPassword.validation.minLength"))
       return
     }
@@ -221,6 +223,7 @@ export function ResetPassword() {
 
               <form onSubmit={handleSubmit} className="space-y-5">
                 {renderPasswordInput("new-password", t("auth.resetPassword.newPassword"), newPassword, "next", setNewPassword)}
+                <PasswordRequirements password={newPassword} className="rounded-lg border border-border/60 bg-panel/40 p-3" />
                 {renderPasswordInput("confirm-password", t("auth.resetPassword.confirmPassword"), confirmPassword, "confirm", setConfirmPassword)}
 
                 <button

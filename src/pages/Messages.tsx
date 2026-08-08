@@ -15,7 +15,7 @@ const WAVE_EMOJI = "\uD83D\uDC4B"
 const reactionEmojis = ["\u2764\uFE0F", "\uD83D\uDE02", "\uD83D\uDE2E", "\uD83D\uDE22", "\uD83D\uDC4D", WAVE_EMOJI]
 
 const avatarFor = (user: { id: string; displayName?: string; avatarUrl?: string; email?: string }) => (
-  user.avatarUrl || `https://i.pravatar.cc/150?u=${encodeURIComponent(user.email || user.id)}`
+  user.avatarUrl || `https://i.pravatar.cc/150?u=${encodeURIComponent(user.id)}`
 )
 
 const messagePreview = (message?: BackendMessage) => {

@@ -1,7 +1,7 @@
 import { useState, useRef } from "react"
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
-import { X, Image, Video, Hash, Smile, Send, ShieldCheck, Trash2 } from "lucide-react"
+import { X, Image, Video, Hash, Smile, Send, ShieldCheck, Trash2, Globe, Lock } from "lucide-react"
 import EmojiPicker, { Theme } from "emoji-picker-react"
 import { useThemeStore } from "@/store/useThemeStore"
 import { Button } from "@/components/ui/Button"
@@ -21,6 +21,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
   const [media, setMedia] = useState<{ file: File; type: 'image' | 'video'; url: string } | null>(null)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [visibility, setVisibility] = useState<"PUBLIC" | "PRIVATE">("PUBLIC")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isDarkMode = useThemeStore((state) => state.isDarkMode)
@@ -84,7 +85,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
             : await uploadApi.image(media.file)
           : null
         const mediaUrls = uploadedMedia ? [uploadedMedia.url] : []
-        await postApi.create(content.trim(), "PUBLIC", mediaUrls)
+        await postApi.create(content.trim(), visibility, mediaUrls)
         window.dispatchEvent(new CustomEvent("cybersocial:post-created"))
         setContent("")
         handleRemoveMedia()
@@ -100,6 +101,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
   const closeAndReset = () => {
     setSubmitError(null)
     setContent("")
+    setVisibility("PUBLIC")
     if (media?.url) {
       URL.revokeObjectURL(media.url)
     }
@@ -207,6 +209,40 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                     {submitError}
                   </div>
                 )}
+
+                <div className="mt-4 flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted">
+                    {t("post.createPost.visibilityLabel")}
+                  </span>
+                  <div className="inline-flex rounded-lg border border-border bg-panel p-1">
+                    <button
+                      type="button"
+                      onClick={() => setVisibility("PUBLIC")}
+                      disabled={isScanning}
+                      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${
+                        visibility === "PUBLIC"
+                          ? "bg-accent-blue/20 text-accent-blue"
+                          : "text-muted hover:text-foreground"
+                      }`}
+                    >
+                      <Globe className="h-3.5 w-3.5" />
+                      {t("post.createPost.visibilityPublic")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVisibility("PRIVATE")}
+                      disabled={isScanning}
+                      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${
+                        visibility === "PRIVATE"
+                          ? "bg-accent-pink/20 text-accent-pink"
+                          : "text-muted hover:text-foreground"
+                      }`}
+                    >
+                      <Lock className="h-3.5 w-3.5" />
+                      {t("post.createPost.visibilityPrivate")}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Footer */}
