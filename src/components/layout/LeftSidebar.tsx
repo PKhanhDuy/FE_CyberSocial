@@ -87,8 +87,8 @@ export function LeftSidebar() {
             {({ isActive }) => (
               <>
                 <Shield className={cn("w-5 h-5", isActive ? "text-accent-pink" : "group-hover:text-foreground")} />
-                <span className="font-medium tracking-wide flex-1">Quản trị</span>
-                <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted">ADMIN</span>
+                <span className="font-medium tracking-wide flex-1">{t("nav.admin")}</span>
+                {/* <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted">ADMIN</span> */}
               </>
             )}
           </NavLink>

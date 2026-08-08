@@ -255,7 +255,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
   }
 
   const submitShare = async (content: string) => {
-    if (!currentUser || !onRepostCreated || isSharing || interactionsLocked) return
+    if (!currentUser || isSharing || interactionsLocked) return
 
     setIsSharing(true)
     setActionError(null)
@@ -266,7 +266,8 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
       setShareCount((count) => count + 1)
       setShareText("")
       setIsShareOpen(false)
-      onRepostCreated(repost)
+      onRepostCreated?.(repost)
+      window.dispatchEvent(new Event("cybersocial:post-created"))
       void refetchVerification()
     } catch (error) {
       setActionError(error instanceof Error ? error.message : t("post.actions.actionError"))
@@ -531,7 +532,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
           <button
             type="button"
             onClick={() => void submitInstantRepost()}
-            disabled={!canInteract || !onRepostCreated || isSharing}
+            disabled={!canInteract || isSharing}
             className="flex items-center gap-2 hover:text-green-400 transition-colors group disabled:cursor-not-allowed disabled:opacity-50"
             title={interactionsLocked ? lockedTitle : t("post.actions.repost")}
           >
@@ -545,7 +546,7 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
               setActionError(null)
               setIsShareOpen(true)
             }}
-            disabled={!canInteract || !onRepostCreated || isSharing}
+            disabled={!canInteract || isSharing}
             className="flex items-center gap-2 hover:text-accent-blue transition-colors group disabled:cursor-not-allowed disabled:opacity-50"
             title={interactionsLocked ? lockedTitle : t("post.actions.share")}
           >

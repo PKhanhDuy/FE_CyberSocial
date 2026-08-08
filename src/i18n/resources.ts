@@ -16,6 +16,7 @@ export const resources = {
         notifications: "Thông báo",
         profile: "Hồ sơ",
         createPost: "Bài viết mới",
+        admin: "Quản trị",
       },
       home: {
         post: "Bài viết",
@@ -328,6 +329,9 @@ export const resources = {
             confirmMismatch: "Xác nhận mật khẩu không khớp.",
           },
         },
+        session: {
+          restoring: "Đang khôi phục phiên đăng nhập...",
+        },
         resetPassword: {
           documentTitle: "Đặt lại mật khẩu | CyberSocial",
           titleHighlight: "ĐẶT LẠI",
@@ -409,6 +413,7 @@ export const resources = {
         notifications: "Notifications",
         profile: "Profile",
         createPost: "New post",
+        admin: "Admin",
       },
       home: {
         post: "Posts",
@@ -723,6 +728,9 @@ export const resources = {
             mustBeDifferent: "New password must be different from your current password.",
             confirmMismatch: "Password confirmation does not match.",
           },
+        },
+        session: {
+          restoring: "Restoring your session...",
         },
         resetPassword: {
           documentTitle: "Reset password | CyberSocial",
