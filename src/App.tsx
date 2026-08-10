@@ -15,6 +15,7 @@ import { useFriendStore } from "./store/useFriendStore"
 import { useNotificationStore } from "./store/useNotificationStore"
 import { usePresenceStore } from "./store/usePresenceStore"
 import { AuthGuard, GuestGuard } from "./components/auth/AuthGuard"
+import { SessionBootstrapScreen } from "./components/auth/SessionBootstrapScreen"
 import { AdminGuard } from "./components/auth/AdminGuard"
 import { AdminLayout } from "./components/admin/AdminLayout"
 import { AdminDashboard } from "./pages/admin/AdminDashboard"
@@ -32,7 +33,8 @@ function App() {
   const isDarkMode = useThemeStore((state) => state.isDarkMode)
   const hydrateTheme = useThemeStore((state) => state.hydrateTheme)
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
-  const refreshCurrentUser = useAuthStore((state) => state.refreshCurrentUser)
+  const isBootstrapping = useAuthStore((state) => state.isBootstrapping)
+  const bootstrap = useAuthStore((state) => state.bootstrap)
   const loadIncomingFriendRequestCount = useFriendStore((state) => state.loadIncomingRequestCount)
   const loadNotifications = useNotificationStore((state) => state.loadNotifications)
   const startPresence = usePresenceStore((state) => state.start)
@@ -47,8 +49,11 @@ function App() {
   }, [isDarkMode])
 
   useEffect(() => {
+    void bootstrap()
+  }, [bootstrap])
+
+  useEffect(() => {
     if (isAuthenticated) {
-      refreshCurrentUser()
       loadIncomingFriendRequestCount()
       loadNotifications()
       hydrateTheme()
@@ -56,7 +61,11 @@ function App() {
       return () => stopPresence()
     }
     stopPresence()
-  }, [hydrateTheme, isAuthenticated, loadIncomingFriendRequestCount, loadNotifications, refreshCurrentUser, startPresence, stopPresence])
+  }, [hydrateTheme, isAuthenticated, loadIncomingFriendRequestCount, loadNotifications, startPresence, stopPresence])
+
+  if (isBootstrapping) {
+    return <SessionBootstrapScreen />
+  }
 
   return (
     <Router>

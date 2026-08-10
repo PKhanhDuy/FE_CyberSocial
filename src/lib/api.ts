@@ -3,8 +3,12 @@ import type { NotificationType } from "@/store/useNotificationStore"
 import { getStoredLanguage } from "@/i18n"
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080").replace(/\/$/, "")
-const ACCESS_TOKEN_KEY = "cybersocial_access_token"
-const USER_KEY = "cybersocial_user"
+
+/** Cờ không chứa dữ liệu nhạy cảm, chỉ để biết có nên thử silent refresh khi tải trang hay không. */
+const SESSION_HINT_KEY = "cybersocial_session"
+/** Khoá cũ từng lưu access token/user trong localStorage — chỉ còn dùng để xoá dữ liệu tồn đọng. */
+const LEGACY_ACCESS_TOKEN_KEY = "cybersocial_access_token"
+const LEGACY_USER_KEY = "cybersocial_user"
 
 export interface ApiResponse<T> {
   success: boolean
@@ -420,9 +424,31 @@ export interface AppPost {
   viaShareId?: string
 }
 
-export const getAccessToken = () => {
-  if (typeof window === "undefined") return null
-  return window.localStorage.getItem(ACCESS_TOKEN_KEY)
+/**
+ * Access token chỉ tồn tại trong bộ nhớ của tab để XSS không thể đọc lại từ localStorage.
+ * Phiên được dựng lại sau khi tải trang bằng refresh cookie HttpOnly (silent refresh).
+ */
+let accessToken: string | null = null
+let accessTokenExpiresAtMs = 0
+let silentRefreshTimer: number | undefined
+let refreshInFlight: Promise<User | null> | null = null
+let onSessionExpired: (() => void) | null = null
+
+/** Làm mới trước khi token hết hạn để request và WebSocket không bao giờ dùng token đã chết. */
+const REFRESH_LEAD_SECONDS = 60
+const MIN_REFRESH_DELAY_MS = 5_000
+/** Tab khác vừa xoay refresh token thì cookie mới cần một nhịp ngắn trước khi thử lại. */
+const ROTATION_RETRY_DELAY_MS = 400
+
+export const getAccessToken = () => accessToken
+
+export const hasSessionHint = () => {
+  if (typeof window === "undefined") return false
+  return window.localStorage.getItem(SESSION_HINT_KEY) === "1"
+}
+
+export const setSessionExpiredHandler = (handler: (() => void) | null) => {
+  onSessionExpired = handler
 }
 
 const getMessageSocketUrl = () => {
@@ -458,17 +484,36 @@ export const presenceApi = {
   },
 }
 
-const setAccessToken = (token: string) => {
-  window.localStorage.setItem(ACCESS_TOKEN_KEY, token)
+const clearSilentRefreshTimer = () => {
+  if (silentRefreshTimer !== undefined) {
+    window.clearTimeout(silentRefreshTimer)
+    silentRefreshTimer = undefined
+  }
+}
+
+const scheduleSilentRefresh = (expiresInSeconds: number) => {
+  clearSilentRefreshTimer()
+  const delayMs = Math.max((expiresInSeconds - REFRESH_LEAD_SECONDS) * 1000, MIN_REFRESH_DELAY_MS)
+  silentRefreshTimer = window.setTimeout(() => {
+    void runSilentRefresh()
+  }, delayMs)
+}
+
+const applyAuthResponse = (auth: AuthResponse) => {
+  accessToken = auth.accessToken
+  accessTokenExpiresAtMs = Date.now() + auth.expiresInSeconds * 1000
+  window.localStorage.setItem(SESSION_HINT_KEY, "1")
+  scheduleSilentRefresh(auth.expiresInSeconds)
+  return mapUser(auth.user)
 }
 
 export const clearAuthStorage = () => {
-  window.localStorage.removeItem(ACCESS_TOKEN_KEY)
-  window.localStorage.removeItem(USER_KEY)
-}
-
-export const storeAuthUser = (user: User) => {
-  window.localStorage.setItem(USER_KEY, JSON.stringify(user))
+  accessToken = null
+  accessTokenExpiresAtMs = 0
+  clearSilentRefreshTimer()
+  window.localStorage.removeItem(SESSION_HINT_KEY)
+  window.localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY)
+  window.localStorage.removeItem(LEGACY_USER_KEY)
 }
 
 export class ApiError extends Error {
@@ -500,19 +545,76 @@ const parseApiError = async (response: Response) => {
   }
 }
 
-async function refreshAccessToken() {
-  const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
-    method: "POST",
-    credentials: "include",
-    headers: { Accept: "application/json" },
+async function requestRefresh(): Promise<AuthResponse | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    })
+    if (!response.ok) return null
+    const body = (await response.json()) as ApiResponse<AuthResponse>
+    return body.data
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Gộp mọi yêu cầu làm mới song song vào một request duy nhất. Backend xoay refresh token sau
+ * mỗi lần dùng, nên hai request cùng lúc sẽ khiến request thứ hai gặp token đã bị thu hồi.
+ */
+async function refreshAccessToken(): Promise<User | null> {
+  if (refreshInFlight) return refreshInFlight
+
+  refreshInFlight = (async () => {
+    let auth = await requestRefresh()
+    if (!auth) {
+      await new Promise((resolve) => window.setTimeout(resolve, ROTATION_RETRY_DELAY_MS))
+      auth = await requestRefresh()
+    }
+    return auth ? applyAuthResponse(auth) : null
+  })()
+
+  try {
+    return await refreshInFlight
+  } finally {
+    refreshInFlight = null
+  }
+}
+
+const runSilentRefresh = async () => {
+  const user = await refreshAccessToken()
+  if (user) return
+  clearAuthStorage()
+  onSessionExpired?.()
+}
+
+/**
+ * Dựng lại phiên sau khi tải lại trang. Bỏ qua hoàn toàn khi chưa từng đăng nhập trên thiết bị này
+ * để khách vào trang đăng nhập không phải chờ một request vô ích.
+ */
+export const restoreSession = async (): Promise<User | null> => {
+  if (!hasSessionHint()) {
+    clearAuthStorage()
+    return null
+  }
+
+  const user = await refreshAccessToken()
+  if (!user) clearAuthStorage()
+  return user
+}
+
+/**
+ * Hẹn giờ có thể bị trình duyệt trì hoãn khi tab ở nền hoặc máy ngủ, nên kiểm tra lại
+ * mỗi lúc tab được xem lại để tránh gửi request bằng token đã hết hạn.
+ */
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible" || !accessToken) return
+    if (Date.now() < accessTokenExpiresAtMs - REFRESH_LEAD_SECONDS * 1000) return
+    void runSilentRefresh()
   })
-
-  if (!response.ok) return false
-
-  const body = (await response.json()) as ApiResponse<AuthResponse>
-  setAccessToken(body.data.accessToken)
-  storeAuthUser(mapUser(body.data.user))
-  return true
 }
 
 async function apiRequest<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
@@ -535,11 +637,13 @@ async function apiRequest<T>(path: string, init: RequestInit = {}, retry = true)
     credentials: "include",
   })
 
-  if (response.status === 401 && retry && path !== "/api/auth/refresh") {
+  if (response.status === 401 && retry && path !== "/api/auth/refresh" && hasSessionHint()) {
     const refreshed = await refreshAccessToken()
     if (refreshed) {
       return apiRequest<T>(path, init, false)
     }
+    clearAuthStorage()
+    onSessionExpired?.()
   }
 
   if (!response.ok) {
@@ -658,10 +762,7 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify({ email, password, rememberMe }),
     })
-    setAccessToken(auth.accessToken)
-    const user = mapUser(auth.user)
-    storeAuthUser(user)
-    return user
+    return applyAuthResponse(auth)
   },
 
   async register(displayName: string, email: string, password: string) {
@@ -669,10 +770,7 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify({ displayName, email, password }),
     })
-    setAccessToken(auth.accessToken)
-    const user = mapUser(auth.user)
-    storeAuthUser(user)
-    return user
+    return applyAuthResponse(auth)
   },
 
   async logout() {
@@ -714,9 +812,7 @@ export const authApi = {
 
 export const userApi = {
   async me() {
-    const user = mapUser(await apiRequest<BackendUser>("/api/users/me"))
-    storeAuthUser(user)
-    return user
+    return mapUser(await apiRequest<BackendUser>("/api/users/me"))
   },
 
   async get(id: string) {
@@ -724,30 +820,24 @@ export const userApi = {
   },
 
   async updateMe(displayName: string) {
-    const user = mapUser(await apiRequest<BackendUser>("/api/users/me", {
+    return mapUser(await apiRequest<BackendUser>("/api/users/me", {
       method: "PUT",
       body: JSON.stringify({ displayName }),
     }))
-    storeAuthUser(user)
-    return user
   },
 
   async updateAvatar(avatarUrl: string) {
-    const user = mapUser(await apiRequest<BackendUser>("/api/users/me/avatar", {
+    return mapUser(await apiRequest<BackendUser>("/api/users/me/avatar", {
       method: "PUT",
       body: JSON.stringify({ avatarUrl }),
     }))
-    storeAuthUser(user)
-    return user
   },
 
   async updateCover(coverUrl: string) {
-    const user = mapUser(await apiRequest<BackendUser>("/api/users/me/cover", {
+    return mapUser(await apiRequest<BackendUser>("/api/users/me/cover", {
       method: "PUT",
       body: JSON.stringify({ coverUrl }),
     }))
-    storeAuthUser(user)
-    return user
   },
 }
 

@@ -1,5 +1,13 @@
 import { create } from "zustand"
-import { ApiError, authApi, clearAuthStorage, userApi } from "@/lib/api"
+import {
+  ApiError,
+  authApi,
+  clearAuthStorage,
+  hasSessionHint,
+  restoreSession,
+  setSessionExpiredHandler,
+  userApi,
+} from "@/lib/api"
 import type { User } from "@/mocks/types"
 
 export type { User } from "@/mocks/types"
@@ -7,9 +15,11 @@ export type { User } from "@/mocks/types"
 interface AuthState {
   user: User | null
   isAuthenticated: boolean
+  isBootstrapping: boolean
   isLoading: boolean
   error: string | null
   accountLockedReason: string | null
+  bootstrap: () => Promise<void>
   login: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>
   register: (username: string, email: string, password: string) => Promise<boolean>
   forgotPassword: (email: string) => Promise<boolean>
@@ -23,30 +33,33 @@ interface AuthState {
   clearAccountLocked: () => void
 }
 
-const getStoredAuth = () => {
-  if (typeof window !== "undefined" && window.localStorage) {
-    const userStr = localStorage.getItem("cybersocial_user")
-    const token = localStorage.getItem("cybersocial_access_token")
-    if (userStr && token) {
-      try {
-        const user = JSON.parse(userStr) as User
-        return { user, isAuthenticated: true }
-      } catch {
-        clearAuthStorage()
-      }
-    }
-  }
-  return { user: null, isAuthenticated: false }
-}
+/** Chặn StrictMode gọi bootstrap hai lần trong môi trường phát triển. */
+let bootstrapPromise: Promise<void> | null = null
 
 export const useAuthStore = create<AuthState>((set) => {
-  const initialAuth = getStoredAuth()
-
   return {
-    ...initialAuth,
+    user: null,
+    isAuthenticated: false,
+    // Chỉ chờ silent refresh khi thiết bị này từng đăng nhập; khách vào được trang login ngay.
+    isBootstrapping: hasSessionHint(),
     isLoading: false,
     error: null,
     accountLockedReason: null,
+
+    bootstrap: async () => {
+      if (bootstrapPromise) return bootstrapPromise
+
+      bootstrapPromise = (async () => {
+        try {
+          const user = await restoreSession()
+          set({ user, isAuthenticated: Boolean(user) })
+        } finally {
+          set({ isBootstrapping: false })
+        }
+      })()
+
+      return bootstrapPromise
+    },
 
     login: async (email, password, rememberMe = false) => {
       set({ isLoading: true, error: null, accountLockedReason: null })
@@ -167,4 +180,9 @@ export const useAuthStore = create<AuthState>((set) => {
     clearError: () => set({ error: null }),
     clearAccountLocked: () => set({ accountLockedReason: null }),
   }
+})
+
+/** Khi refresh token hết hạn hoặc bị thu hồi, đưa UI về trạng thái khách ngay lập tức. */
+setSessionExpiredHandler(() => {
+  useAuthStore.setState({ user: null, isAuthenticated: false, isBootstrapping: false })
 })
