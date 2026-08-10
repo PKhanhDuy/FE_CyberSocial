@@ -1,7 +1,7 @@
 import { useState, useRef } from "react"
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
-import { X, Image, Video, Hash, Smile, Send, ShieldCheck, Trash2, Globe, Lock } from "lucide-react"
+import { X, Image, Video, Hash, Smile, Send, Trash2, Globe, Lock, Loader2 } from "lucide-react"
 import EmojiPicker, { Theme } from "emoji-picker-react"
 import { useThemeStore } from "@/store/useThemeStore"
 import { Button } from "@/components/ui/Button"
@@ -16,7 +16,7 @@ interface CreatePostModalProps {
 
 export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
   const [content, setContent] = useState("")
-  const [isScanning, setIsScanning] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [media, setMedia] = useState<{ file: File; type: 'image' | 'video'; url: string } | null>(null)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
@@ -73,29 +73,26 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
       return
     }
 
-    setIsScanning(true)
+    setIsSubmitting(true)
     setSubmitError(null)
 
-    // Keep the existing AI scanning UX unchanged; submit after the scan finishes.
-    window.setTimeout(async () => {
-      try {
-        const uploadedMedia = media
-          ? media.type === "video"
-            ? await uploadApi.video(media.file)
-            : await uploadApi.image(media.file)
-          : null
-        const mediaUrls = uploadedMedia ? [uploadedMedia.url] : []
-        await postApi.create(content.trim(), visibility, mediaUrls)
-        window.dispatchEvent(new CustomEvent("cybersocial:post-created"))
-        setContent("")
-        handleRemoveMedia()
-        onClose()
-      } catch (error) {
-        setSubmitError(error instanceof Error ? error.message : "Khong tao duoc bai viet")
-      } finally {
-        setIsScanning(false)
-      }
-    }, 1500)
+    try {
+      const uploadedMedia = media
+        ? media.type === "video"
+          ? await uploadApi.video(media.file)
+          : await uploadApi.image(media.file)
+        : null
+      const mediaUrls = uploadedMedia ? [uploadedMedia.url] : []
+      await postApi.create(content.trim(), visibility, mediaUrls)
+      window.dispatchEvent(new CustomEvent("cybersocial:post-created"))
+      setContent("")
+      handleRemoveMedia()
+      onClose()
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Khong tao duoc bai viet")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const closeAndReset = () => {
@@ -166,7 +163,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                       className="w-full bg-transparent text-foreground placeholder-text-secondary resize-none outline-none text-lg font-sans py-2"
                       rows={media ? 1 : 10}
                       style={{ minHeight: media ? '0.4rem' : '16rem' }}
-                      disabled={isScanning}
+                      disabled={isSubmitting}
                     />
 
                     {/* Media Preview — only shown when media exists */}
@@ -190,20 +187,6 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                   </div>
                 </div>
 
-                {isScanning && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-4 p-3 rounded-lg bg-accent-blue/10 border border-accent-blue/30 flex items-center gap-3 relative overflow-hidden"
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-accent-blue/10 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]" />
-                    <div className="w-5 h-5 border-2 border-accent-blue border-t-transparent rounded-full animate-spin relative z-10" />
-                    <span className="text-accent-blue text-sm font-mono font-bold tracking-wide relative z-10">
-                      {t("post.createPost.analyzing")}
-                    </span>
-                  </motion.div>
-                )}
-
                 {submitError && (
                   <div className="mt-4 p-3 rounded-lg bg-danger/10 border border-danger/40 text-sm text-foreground">
                     {submitError}
@@ -218,7 +201,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                     <button
                       type="button"
                       onClick={() => setVisibility("PUBLIC")}
-                      disabled={isScanning}
+                      disabled={isSubmitting}
                       className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${
                         visibility === "PUBLIC"
                           ? "bg-accent-blue/20 text-accent-blue"
@@ -231,7 +214,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                     <button
                       type="button"
                       onClick={() => setVisibility("PRIVATE")}
-                      disabled={isScanning}
+                      disabled={isSubmitting}
                       className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${
                         visibility === "PRIVATE"
                           ? "bg-accent-pink/20 text-accent-pink"
@@ -310,13 +293,13 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                   <Button
                     variant={(content.trim() || media) ? "neon-pink" : "default"}
                     onClick={handlePost}
-                    disabled={(!content.trim() && !media) || isScanning}
+                    disabled={(!content.trim() && !media) || isSubmitting}
                     className="flex items-center gap-2 px-6 font-bold"
                   >
-                    {isScanning ? (
+                    {isSubmitting ? (
                       <>
-                        <ShieldCheck className="w-4 h-4" />
-                        {t("post.createPost.verify")}
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {t("post.createPost.posting")}
                       </>
                     ) : (
                       <>
