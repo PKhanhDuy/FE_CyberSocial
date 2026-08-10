@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate, Link } from "react-router-dom"
-import { ShieldCheck, Network, Activity, Settings, MapPin, Link as LinkIcon, Edit2, UserCircle, Heart, Briefcase, GraduationCap, Globe, Languages, Cake, Camera, HelpCircle, Moon, Sun, LogOut, ChevronLeft, ChevronRight, KeyRound, Check, Images, Music2, Plus, Play, Trash2, X } from "lucide-react"
+import { ShieldCheck, Activity, Settings, MapPin, Link as LinkIcon, Edit2, UserCircle, Heart, Briefcase, GraduationCap, Globe, Languages, Cake, Camera, HelpCircle, Moon, Sun, LogOut, ChevronLeft, ChevronRight, KeyRound, Check, Images, Music2, Plus, Play, Trash2, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { PostCard } from "@/components/feed/PostCard"
 import { AIAnalysisModal } from "@/components/ai/AIAnalysisModal"
 import type { Post } from "@/mocks/types"
-import { Progress } from "@/components/ui/Progress"
 import { postApi, uploadApi, followApi, type FollowUser } from "@/lib/api"
 import { createStoryHighlight, loadStoryHighlights, removeStoryFromHighlight, removeStoryHighlight, STORY_HIGHLIGHTS_EVENT, type StoryHighlight } from "@/lib/storyHighlights"
 import { formatRelativeStoryTime } from "@/lib/relativeStoryTime"
@@ -67,9 +66,7 @@ export function Profile() {
 
   const TABS = [
     { id: "activity", label: t("profile.activity"), icon: Activity },
-    { id: "about", label: t("profile.introduction"), icon: UserCircle },
-    { id: "network", label: t("profile.network"), icon: Network },
-    { id: "diagnostics", label: t("profile.predictions"), icon: ShieldCheck },
+    { id: "about", label: t("profile.introduction"), icon: UserCircle }
   ]
 
   const ABOUT_SIDEBAR = [
@@ -1084,74 +1081,6 @@ export function Profile() {
                   {renderField("hobbies", t("profile.introductions.detailsContent.favorite"), <Heart className="w-5 h-5" />)}
                 </div>
               )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === "network" && (
-          <div className="glass-panel border border-border p-8 flex flex-col items-center justify-center text-center rounded-xl h-64">
-            <Network className="w-12 h-12 text-accent-blue mb-4 opacity-50" />
-            <h3 className="text-lg font-bold tracking-widest text-foreground mb-2">{t("profile.networkContent.title")}</h3>
-            <p className="text-muted max-w-md">
-              {t("profile.networkContent.description")}
-            </p>
-          </div>
-        )}
-
-        {activeTab === "diagnostics" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* System Integrity */}
-            <div className="bg-panel border border-border rounded-xl p-6 space-y-6">
-              <div className="flex items-center gap-2 border-b border-border pb-4">
-                <Settings className="w-5 h-5 text-accent-blue" />
-                <h3 className="font-bold tracking-wider text-foreground">{t("profile.predictionsContent.systemIntegrity")}</h3>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-sm mb-1 text-muted">
-                    <span>Xác minh danh tính</span>
-                    <span className="text-accent-blue font-mono">99.9%</span>
-                  </div>
-                  <Progress value={99.9} indicatorColor="bg-accent-blue" className="h-1.5" />
-                </div>
-                <div>
-                  <div className="flex justify-between text-sm mb-1 text-muted">
-                    <span>Khả năng chống Deepfake</span>
-                    <span className="text-accent-blue font-mono">94.2%</span>
-                  </div>
-                  <Progress value={94.2} indicatorColor="bg-accent-blue" className="h-1.5" />
-                </div>
-                <div>
-                  <div className="flex justify-between text-sm mb-1 text-muted">
-                    <span>Sự can thiệp của Bot</span>
-                    <span className="text-accent-pink font-mono">2.1%</span>
-                  </div>
-                  <Progress value={2.1} indicatorColor="bg-accent-pink" className="h-1.5" />
-                </div>
-              </div>
-            </div>
-
-            {/* Clearance Level */}
-            <div className="bg-panel border border-border rounded-xl p-6">
-              <div className="flex items-center gap-2 border-b border-border pb-4 mb-6">
-                <ShieldCheck className="w-5 h-5 text-accent-blue" />
-                <h3 className="font-bold tracking-wider text-foreground">{t("profile.predictionsContent.accessProtocol")}</h3>
-              </div>
-
-              <div className="space-y-3">
-                {['Cấp 1: Truy cập Node cơ bản', 'Cấp 2: Tích hợp bảng tin quỹ đạo', 'Cấp 3: Khai thác dữ liệu sâu', 'Cấp 4: Ghi đè giao thức (Bị hạn chế)'].map((protocol, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 bg-background border border-border rounded-lg">
-                    <span className="text-sm text-muted">{protocol}</span>
-                    <span className={cn(
-                      "text-xs px-2 py-1 rounded font-mono uppercase",
-                      i < 3 ? "bg-accent-blue/10 text-accent-blue border border-accent-blue/30" : "bg-red-500/10 text-red-500 border border-red-500/30"
-                    )}>
-                      {i < 3 ? 'Cấp quyền' : 'Từ chối'}
-                    </span>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         )}
