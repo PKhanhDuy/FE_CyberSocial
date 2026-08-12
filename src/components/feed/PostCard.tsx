@@ -135,20 +135,29 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
     ),
     [post, verification, likeCount, commentCount, shareCount, isLiked],
   )
-  const isSuspicious = displayPost.aiState === "suspicious"
+  const isLabelRejected = verification?.adminDecision === "REJECT_LABEL"
+  const aiPredictedFake = displayPost.aiState === "suspicious"
+  const isSuspicious = aiPredictedFake && (!isLabelRejected || isAdmin)
   const isVerified = displayPost.aiState === "verified"
   const isAnalyzing = verification?.status === "ANALYZING"
   const isPending = verification?.status === "PENDING" && (verification.nextThreshold ?? 0) > 0
   const isFailed = verification?.status === "FAILED"
   const isMonitoring = !isSuspicious && !isVerified
+  const showAiHeader = isAdmin || isAnalyzing || isSuspicious || isVerified
   const interactionProgress = verification?.nextThreshold
     ? Math.min(100, Math.round((totalInteractions / verification.nextThreshold) * 100))
     : 0
-  const showInteractionProgress = Boolean(verification?.nextThreshold && verification.nextThreshold > 0 && !isAnalyzing)
+  const showInteractionProgress = Boolean(
+    isAdmin
+    && verification?.nextThreshold
+    && verification.nextThreshold > 0
+    && !isAnalyzing,
+  )
   const passedFirstThreshold = verification?.status === "PENDING"
     && (verification.analysisTier ?? 0) === 0
     && totalInteractions >= 5
   const postTrustScore = resolvePostTrustScore(verification)
+  const showTrustScore = isAdmin || !isLabelRejected
   const headerStatusText = isAnalyzing
     ? t("post.aiAnalyzing")
     : isFailed
@@ -158,7 +167,9 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
         : isPending
           ? t("post.waitingInteractions", { current: totalInteractions, target: verification!.nextThreshold })
         : isSuspicious
-          ? t("post.isSuspicious")
+          ? isAdmin && isLabelRejected
+            ? t("post.adminAiPredictedFake")
+            : t("post.isSuspicious")
           : isVerified
             ? t("post.isVerified")
             : t("post.isMonitoring")
@@ -344,52 +355,59 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
         "glass-panel rounded-xl overflow-hidden mb-6 transition-all duration-300",
         isSuspicious && "neon-border-pink",
         isVerified && "border-green-500/30 shadow-[0_0_15px_rgba(34,197,94,0.1)]",
-        isMonitoring && "border-accent-blue/30"
+        ((isAdmin && isMonitoring) || isAnalyzing) && "border-accent-blue/30"
       )}
     >
       {/* AI Header Status */}
-      <div className={cn(
-        "px-4 py-2 border-b flex justify-between items-center text-xs font-semibold tracking-wider",
-        isSuspicious ? "bg-accent-pink/10 border-accent-pink/30 text-accent-pink" :
-          isVerified ? "bg-green-500/10 border-green-500/30 text-green-400" :
-            isFailed ? "bg-danger/10 border-danger/30 text-danger" :
-              "bg-accent-blue/10 border-accent-blue/30 text-accent-blue"
-      )}>
-        <div className="flex items-center gap-2 min-w-0">
-          {isSuspicious && <ShieldAlert className="w-4 h-4 shrink-0" />}
-          {isVerified && <ShieldCheck className="w-4 h-4 shrink-0" />}
-          {(isMonitoring || isAnalyzing || isPending) && (
-            isAnalyzing
-              ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-              : <Activity className="w-4 h-4 shrink-0 animate-pulse" />
-          )}
-          <span className="truncate">{headerStatusText}</span>
-          {verification?.status === "COMPLETED" && verification.label && (
-            <Badge variant={verification.label === "FAKE" ? "suspicious" : "verified"} className="shrink-0">
-              {verification.label === "FAKE" ? t("post.labelFake") : t("post.labelReal")}
-            </Badge>
-          )}
+      {showAiHeader && (
+        <div className={cn(
+          "px-4 py-2 border-b flex justify-between items-center text-xs font-semibold tracking-wider",
+          isSuspicious ? "bg-accent-pink/10 border-accent-pink/30 text-accent-pink" :
+            isVerified ? "bg-green-500/10 border-green-500/30 text-green-400" :
+              isFailed ? "bg-danger/10 border-danger/30 text-danger" :
+                "bg-accent-blue/10 border-accent-blue/30 text-accent-blue"
+        )}>
+          <div className="flex items-center gap-2 min-w-0">
+            {isSuspicious && <ShieldAlert className="w-4 h-4 shrink-0" />}
+            {isVerified && <ShieldCheck className="w-4 h-4 shrink-0" />}
+            {(isMonitoring || isAnalyzing || isPending) && (
+              isAnalyzing
+                ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                : <Activity className="w-4 h-4 shrink-0 animate-pulse" />
+            )}
+            <span className="truncate">{headerStatusText}</span>
+            {verification?.status === "COMPLETED" && verification.label && (
+              <Badge variant={verification.label === "FAKE" ? "suspicious" : "verified"} className="shrink-0">
+                {verification.label === "FAKE" ? t("post.labelFake") : t("post.labelReal")}
+              </Badge>
+            )}
+            {isAdmin && isLabelRejected && (
+              <span className="shrink-0 rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-[10px] font-bold text-green-400">
+                {t("post.adminRejectedLabel")}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            {showInteractionProgress && (
+              <div className="hidden sm:flex items-center gap-2 w-32">
+                <Progress value={interactionProgress} indicatorColor="bg-accent-blue" className="h-1.5" />
+                <span className="font-mono text-[10px] text-muted">{interactionProgress}%</span>
+              </div>
+            )}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsDemoOpen(true)}
+                className="inline-flex h-8 items-center gap-2 rounded-lg border border-accent-blue/40 bg-accent-blue/10 px-3 text-xs font-bold text-accent-blue transition-colors hover:bg-accent-blue/20"
+                title="Demo propagation"
+              >
+                <FlaskConical className="h-4 w-4" />
+                Demo
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          {showInteractionProgress && (
-            <div className="hidden sm:flex items-center gap-2 w-32">
-              <Progress value={interactionProgress} indicatorColor="bg-accent-blue" className="h-1.5" />
-              <span className="font-mono text-[10px] text-muted">{interactionProgress}%</span>
-            </div>
-          )}
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setIsDemoOpen(true)}
-              className="inline-flex h-8 items-center gap-2 rounded-lg border border-accent-blue/40 bg-accent-blue/10 px-3 text-xs font-bold text-accent-blue transition-colors hover:bg-accent-blue/20"
-              title="Demo propagation"
-            >
-              <FlaskConical className="h-4 w-4" />
-              Demo
-            </button>
-          )}
-        </div>
-      </div>
+      )}
 
       <div className="p-5">
         <div className="flex justify-between items-start mb-4">
@@ -417,21 +435,23 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
               </div>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-xs text-muted">{t("post.trustScore")}</div>
-            {postTrustScore != null ? (
-              <div className={cn(
-                "font-mono font-bold",
-                postTrustScore > 80 ? "text-green-400" : postTrustScore < 50 ? "text-accent-pink" : "text-yellow-400",
-              )}>
-                {postTrustScore}%
-              </div>
-            ) : isAnalyzing ? (
-              <div className="font-mono font-bold text-accent-blue animate-pulse">...</div>
-            ) : (
-              <div className="font-mono font-bold text-muted" title={t("post.trustScorePending")}>—</div>
-            )}
-          </div>
+          {showTrustScore && (
+            <div className="text-right">
+              <div className="text-xs text-muted">{t("post.trustScore")}</div>
+              {postTrustScore != null ? (
+                <div className={cn(
+                  "font-mono font-bold",
+                  postTrustScore > 80 ? "text-green-400" : postTrustScore < 50 ? "text-accent-pink" : "text-yellow-400",
+                )}>
+                  {postTrustScore}%
+                </div>
+              ) : isAnalyzing ? (
+                <div className="font-mono font-bold text-accent-blue animate-pulse">...</div>
+              ) : (
+                <div className="font-mono font-bold text-muted" title={t("post.trustScorePending")}>—</div>
+              )}
+            </div>
+          )}
         </div>
 
         {post.content && (

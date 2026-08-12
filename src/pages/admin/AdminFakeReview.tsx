@@ -42,8 +42,13 @@ export function AdminFakeReview() {
   const mutation = useMutation({
     mutationFn: ({ postId, decision, note }: { postId: string; decision: AdminVerdictDecision; note: string }) =>
       adminApi.applyVerdict(postId, decision, note),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["admin-fake-posts"] })
+      queryClient.invalidateQueries({ queryKey: ["posts"] })
+      queryClient.invalidateQueries({ queryKey: ["admin-post-preview"] })
+      window.dispatchEvent(
+        new CustomEvent("cybersocial:verification-updated", { detail: { postId: variables.postId } }),
+      )
       setPending(null)
       setError(null)
     },

@@ -18,6 +18,17 @@ export function usePostVerification(postId: string, totalInteractions: number) {
   }, [postId])
 
   useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ postId: string }>).detail
+      if (detail?.postId === postId) {
+        void refetch()
+      }
+    }
+    window.addEventListener("cybersocial:verification-updated", handler)
+    return () => window.removeEventListener("cybersocial:verification-updated", handler)
+  }, [postId, refetch])
+
+  useEffect(() => {
     setIsLoading(true)
     void refetch()
   }, [refetch, totalInteractions])
