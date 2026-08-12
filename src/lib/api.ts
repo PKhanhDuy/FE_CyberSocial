@@ -138,6 +138,7 @@ export interface BackendPostVerification {
   lastAnalyzedAt?: string
   updatedAt?: string
   publicLabel?: boolean
+  adminDecision?: "CONFIRM_FAKE" | "REJECT_LABEL" | null
   interactionsLocked?: boolean
 }
 
@@ -162,6 +163,7 @@ export interface PostVerification {
   lastAnalyzedAt?: string
   updatedAt?: string
   publicLabel?: boolean
+  adminDecision?: "CONFIRM_FAKE" | "REJECT_LABEL" | null
   interactionsLocked?: boolean
 }
 
@@ -746,6 +748,7 @@ export const mapPostVerification = (verification: BackendPostVerification): Post
   lastAnalyzedAt: verification.lastAnalyzedAt,
   updatedAt: verification.updatedAt,
   publicLabel: verification.publicLabel ?? false,
+  adminDecision: verification.adminDecision ?? null,
   interactionsLocked: verification.interactionsLocked ?? false,
 })
 
