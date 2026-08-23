@@ -29,7 +29,9 @@ export function Explore() {
       setIsLoading(true)
       setError(null)
       try {
-        const response = await postApi.list()
+        const response = activeFilter === "suspicious"
+          ? await postApi.listSuspicious(0, 100)
+          : await postApi.list(0, 100)
         setPosts(response.content)
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : t("explore.noData"))
@@ -42,18 +44,17 @@ export function Explore() {
     loadPosts()
     window.addEventListener("cybersocial:post-created", loadPosts)
     return () => window.removeEventListener("cybersocial:post-created", loadPosts)
-  }, [t])
+  }, [activeFilter, t])
 
   const filteredPosts = useMemo(() => {
     return posts.filter((post) => {
-      const matchesFilter = activeFilter === "all" || post.aiState === activeFilter
       const normalizedSearch = searchQuery.trim().toLowerCase()
       const matchesSearch = !normalizedSearch
         || post.content.toLowerCase().includes(normalizedSearch)
         || post.author.username.toLowerCase().includes(normalizedSearch)
-      return matchesFilter && matchesSearch
+      return matchesSearch
     })
-  }, [activeFilter, posts, searchQuery])
+  }, [posts, searchQuery])
 
   const loadBadgeLabel = overview?.loadStatus === "CRITICAL"
     ? t("explore.loadCritical")
@@ -253,7 +254,7 @@ export function Explore() {
         ))}
         {!isLoading && filteredPosts.length === 0 && (
           <div className="text-center py-10 text-muted font-mono">
-            {t("explore.noDataFeed")}
+            {activeFilter === "suspicious" ? t("explore.noSuspiciousPosts") : t("explore.noDataFeed")}
           </div>
         )}
       </div>

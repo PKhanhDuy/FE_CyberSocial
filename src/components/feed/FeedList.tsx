@@ -70,7 +70,7 @@ export function FeedList({ searchQuery = "", onViewAnalysis }: FeedListProps) {
   const errorMessage = error instanceof Error ? error.message : error ? t("post.noPostLoad") : null
 
   return (
-    <div className="space-y-2 mt-6 pb-20">
+    <div className="space-y-6 mt-6">
       {isLoading && (
         <div className="text-center py-8 text-muted font-mono">
           {t("post.downloading")}

@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
 import type { Post } from "@/mocks/types"
 import { Link } from "react-router-dom"
 import { createPortal } from "react-dom"
@@ -14,6 +14,7 @@ import { useAuthStore } from "@/store/useAuthStore"
 import { useTranslation } from "react-i18next"
 import { optimizeCloudinaryImage } from "@/lib/media"
 import { usePostVerification } from "@/hooks/usePostVerification"
+import { usePostStatsRealtime } from "@/hooks/usePostStatsRealtime"
 import { buildPostWithVerification, isInteractionsLocked, resolvePostTrustScore } from "@/lib/postVerification"
 
 interface PostCardProps {
@@ -122,6 +123,23 @@ export function PostCard({ post, onViewAnalysis, onRepostCreated }: PostCardProp
   const contentPostId = post.sharedPost?.id ?? post.id
   const totalInteractions = likeCount + commentCount + shareCount
   const { verification, refetch: refetchVerification } = usePostVerification(contentPostId, totalInteractions)
+
+  const handleStatsUpdate = useCallback((stats: { likes: number; comments: number; shares: number }) => {
+    setLikeCount(stats.likes)
+    setCommentCount(stats.comments)
+    setShareCount(stats.shares)
+    void refetchVerification()
+  }, [refetchVerification])
+
+  usePostStatsRealtime(post.id, handleStatsUpdate)
+
+  useEffect(() => {
+    setLikeCount(post.likes)
+    setCommentCount(post.comments)
+    setShareCount(post.shares)
+    setIsLiked(Boolean(post.isLiked))
+  }, [post.id, post.likes, post.comments, post.shares, post.isLiked])
+
   const displayPost = useMemo(
     () => buildPostWithVerification(
       {

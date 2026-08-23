@@ -135,6 +135,7 @@ export const resources = {
         all: "Tất cả",
         suspicious: "Cảnh báo rủi ro",
         noDataFeed: "Không có bài viết nào để hiển thị.",
+        noSuspiciousPosts: "Chưa có bài viết nào bị AI gắn nhãn rủi ro.",
         asyncData: "Đang đồng bộ dữ liệu..."
       },
       verifyedNews: {
@@ -536,6 +537,7 @@ export const resources = {
         all: "All",
         suspicious: "Suspicious",
         noDataFeed: "No posts to display.",
+        noSuspiciousPosts: "No posts flagged as suspicious yet.",
         asyncData: "Synchronizing data..."
       },
       verifyedNews: {

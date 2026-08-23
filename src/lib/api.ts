@@ -392,6 +392,21 @@ export type MessageSocketEvent =
       userId: string
       online: boolean
     }
+  | {
+      type: "POST_STATS_UPDATED"
+      conversationId?: null
+      message?: null
+      messageId?: null
+      reaction?: null
+      userId?: null
+      online?: null
+      postId: string
+      likeCount: number
+      commentCount: number
+      shareCount: number
+    }
+
+export type PostStatsUpdatedEvent = Extract<MessageSocketEvent, { type: "POST_STATS_UPDATED" }>
 
 export interface MessageConversation {
   id: string
@@ -715,6 +730,11 @@ export const mapVerifiedPost = (post: BackendPost): AppPost => ({
   aiState: "verified",
 })
 
+export const mapSuspiciousPost = (post: BackendPost): AppPost => ({
+  ...mapPost(post),
+  aiState: "suspicious",
+})
+
 export const mapPostComment = (comment: BackendPostComment) => ({
   id: comment.id,
   postId: comment.postId,
@@ -862,6 +882,14 @@ export const postApi = {
     return {
       ...response,
       content: response.content.map(mapVerifiedPost),
+    }
+  },
+
+  async listSuspicious(page = 0, size = 20) {
+    const response = await apiRequest<PagedResponse<BackendPost>>(`/api/posts/suspicious?page=${page}&size=${size}`)
+    return {
+      ...response,
+      content: response.content.map(mapSuspiciousPost),
     }
   },
 
