@@ -36,7 +36,7 @@ export function UserRightSidebar() {
   const previewRequests = incomingRequests.slice(0, 3)
 
   return (
-    <aside className="fixed right-0 top-0 h-screen w-80 glass-panel border-l border-border z-10 p-6 overflow-y-auto">
+    <aside className="sticky top-0 hidden h-screen w-[320px] shrink-0 overflow-y-auto border-l border-border glass-panel p-5 xl:block xl:p-6">
       <div className="flex items-center gap-2 mb-8">
         <ShieldCheck className="w-5 h-5 text-green-400" />
         <h2 className="text-lg font-bold tracking-wider text-foreground">{t("sidebar.title")}</h2>

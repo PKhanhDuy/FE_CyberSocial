@@ -1,7 +1,8 @@
 import { create } from "zustand"
-import { createMessageSocket, presenceApi, type MessageSocketEvent } from "@/lib/api"
+import { createMessageSocket, presenceApi, type MessageSocketEvent, type PostStatsUpdatedEvent } from "@/lib/api"
 
 type RealtimeListener = (event: MessageSocketEvent) => void
+type PostStatsListener = (event: PostStatsUpdatedEvent) => void
 
 interface PresenceState {
   onlineIds: Set<string>
@@ -11,15 +12,34 @@ interface PresenceState {
   stop: () => void
   isOnline: (userId: string) => boolean
   subscribe: (listener: RealtimeListener) => () => void
+  subscribePostStats: (listener: PostStatsListener) => () => void
+  subscribePost: (postId: string) => void
+  unsubscribePost: (postId: string) => void
 }
 
 let socket: WebSocket | null = null
 let reconnectTimer: number | undefined
 let disposed = true
 const listeners = new Set<RealtimeListener>()
+const postStatsListeners = new Set<PostStatsListener>()
+const activePostSubscriptions = new Set<string>()
 
 const dispatch = (event: MessageSocketEvent) => {
   listeners.forEach((listener) => listener(event))
+  if (event.type === "POST_STATS_UPDATED") {
+    postStatsListeners.forEach((listener) => listener(event))
+  }
+}
+
+const sendPostCommand = (action: "SUBSCRIBE_POST" | "UNSUBSCRIBE_POST", postId: string) => {
+  if (!postId || !socket || socket.readyState !== WebSocket.OPEN) return
+  socket.send(JSON.stringify({ action, postId }))
+}
+
+const resubscribeActivePosts = () => {
+  activePostSubscriptions.forEach((postId) => {
+    sendPostCommand("SUBSCRIBE_POST", postId)
+  })
 }
 
 export const usePresenceStore = create<PresenceState>((set, get) => ({
@@ -42,6 +62,25 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
     return () => {
       listeners.delete(listener)
     }
+  },
+
+  subscribePostStats: (listener) => {
+    postStatsListeners.add(listener)
+    return () => {
+      postStatsListeners.delete(listener)
+    }
+  },
+
+  subscribePost: (postId) => {
+    if (!postId) return
+    activePostSubscriptions.add(postId)
+    sendPostCommand("SUBSCRIBE_POST", postId)
+  },
+
+  unsubscribePost: (postId) => {
+    if (!postId) return
+    activePostSubscriptions.delete(postId)
+    sendPostCommand("UNSUBSCRIBE_POST", postId)
   },
 
   start: () => {
@@ -69,6 +108,7 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
 
       socket.addEventListener("open", () => {
         set({ isConnected: true })
+        resubscribeActivePosts()
         void get().hydrate()
       })
 
@@ -92,6 +132,7 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
     }
     socket?.close()
     socket = null
+    activePostSubscriptions.clear()
     set({ onlineIds: new Set(), isConnected: false })
   },
 }))

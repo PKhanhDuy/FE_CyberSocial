@@ -12,7 +12,7 @@ export function Home() {
   const { t } = useTranslation()
   return (
     <div className="space-y-6">
-      <div className="border-b border-border pb-4 sticky top-0 bg-background/ backdrop-blur-md z-10 pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="sticky top-0 z-10 border-b border-border bg-background/80 pb-4 pt-2 backdrop-blur-md lg:top-0 lg:pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-wider neon-text-blue">{t("home.post")}</h1>
 
         <div className="relative w-full sm:max-w-md">

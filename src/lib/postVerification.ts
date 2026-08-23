@@ -19,7 +19,10 @@ export function resolveAiState(verification: PostVerification | null): AIState {
     return "monitoring"
   }
   if (verification.status === "COMPLETED") {
-    return verification.label === "FAKE" ? "suspicious" : "verified"
+    if (verification.label === "FAKE" && verification.adminDecision !== "REJECT_LABEL") {
+      return "suspicious"
+    }
+    return verification.label === "REAL" ? "verified" : "monitoring"
   }
   return "monitoring"
 }

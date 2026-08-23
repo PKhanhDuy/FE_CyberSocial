@@ -28,6 +28,10 @@ const messagePreview = (message?: BackendMessage) => {
 
 type DraftMode = "TEXT" | "LINK"
 
+const isMediaMessage = (message: BackendMessage) => (
+  (message.messageType === "IMAGE" || message.messageType === "VIDEO") && Boolean(message.mediaUrl)
+)
+
 type PendingMedia = {
   file: File
   previewUrl: string
@@ -54,10 +58,36 @@ export function Messages() {
   const [isSending, setIsSending] = useState(false)
   const [pendingMedia, setPendingMedia] = useState<PendingMedia | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const selectedConversationIdRef = useRef<string | null>(null)
   const conversationIdsRef = useRef<Set<string>>(new Set())
+  const reactionPickerTimerRef = useRef<number | undefined>(undefined)
+
+  const showReactionPicker = useCallback((messageId: string) => {
+    if (reactionPickerTimerRef.current) {
+      window.clearTimeout(reactionPickerTimerRef.current)
+      reactionPickerTimerRef.current = undefined
+    }
+    setHoveredMessageId(messageId)
+  }, [])
+
+  const hideReactionPicker = useCallback(() => {
+    if (reactionPickerTimerRef.current) {
+      window.clearTimeout(reactionPickerTimerRef.current)
+    }
+    reactionPickerTimerRef.current = window.setTimeout(() => {
+      setHoveredMessageId(null)
+      reactionPickerTimerRef.current = undefined
+    }, 180)
+  }, [])
+
+  useEffect(() => () => {
+    if (reactionPickerTimerRef.current) {
+      window.clearTimeout(reactionPickerTimerRef.current)
+    }
+  }, [])
 
   const conversationByFriendId = useMemo(() => {
     return new Map(conversations.map((conversation) => [conversation.friend.id, conversation]))
@@ -367,12 +397,12 @@ export function Messages() {
           alt=""
           loading="lazy"
           decoding="async"
-          className="max-h-64 rounded-lg object-cover"
+          className="block max-h-64 w-full object-cover"
         />
       )
     }
     if (message.messageType === "VIDEO" && message.mediaUrl) {
-      return <video src={message.mediaUrl} controls className="max-h-64 rounded-lg bg-black" />
+      return <video src={message.mediaUrl} controls className="block max-h-64 w-full bg-black" />
     }
     if (message.messageType === "LINK" && message.linkUrl) {
       return (
@@ -444,7 +474,7 @@ export function Messages() {
 
   return (
     <div className="py-4">
-      <section className="flex h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)] min-h-[32rem] overflow-hidden rounded-xl border border-border bg-background/60 shadow-xl">
+      <section className="flex min-h-[calc(100dvh-10rem)] h-[calc(100dvh-10rem)] max-h-[calc(100dvh-10rem)] overflow-hidden rounded-xl border border-border bg-background/60 shadow-xl lg:min-h-[calc(100dvh-6rem)] lg:h-[calc(100dvh-6rem)] lg:max-h-[calc(100dvh-6rem)]">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="shrink-0 flex items-center gap-3 border-b border-border bg-background/95 p-4 backdrop-blur">
             <button
@@ -493,16 +523,47 @@ export function Messages() {
             )}
             {messages.map((message) => {
               const isOwn = message.sender.id === currentUser?.id
+              const isReactionPickerOpen = hoveredMessageId === message.id
+              const isMedia = isMediaMessage(message)
               return (
-                <div key={message.id} className={cn("group relative flex", isOwn ? "justify-end" : "justify-start")}>
-                  <div className={cn("relative flex max-w-[78%] flex-col", isOwn && "items-end")}>
-                    <div className={cn(
-                      "rounded-2xl px-4 py-2 text-sm leading-relaxed shadow-md ring-1",
-                      isOwn
-                        ? "bg-gradient-to-br from-accent-blue to-cyan-400 text-white shadow-accent-blue/20 ring-white/10"
-                        : "bg-panel text-foreground shadow-black/5 ring-border"
-                    )}>
-                      {renderMessageContent(message)}
+                <div key={message.id} className={cn("flex", isOwn ? "justify-end" : "justify-start")}>
+                  <div
+                    className={cn("relative flex max-w-[78%] flex-col pb-8", isOwn && "items-end")}
+                    onMouseEnter={() => showReactionPicker(message.id)}
+                    onMouseLeave={hideReactionPicker}
+                  >
+                    <div className={cn("relative", isOwn && "self-end")}>
+                      <div className={cn(
+                        "rounded-2xl shadow-md overflow-hidden",
+                        isMedia ? "p-px" : "px-4 py-2 text-sm leading-relaxed ring-1",
+                        isOwn
+                          ? isMedia
+                            ? "bg-gradient-to-br from-accent-blue to-cyan-400 shadow-accent-blue/20 ring-1 ring-white/15"
+                            : "bg-gradient-to-br from-accent-blue to-cyan-400 text-white shadow-accent-blue/20 ring-white/10"
+                          : isMedia
+                            ? "bg-panel ring-1 ring-border shadow-black/5"
+                            : "bg-panel text-foreground shadow-black/5 ring-border",
+                      )}>
+                        {renderMessageContent(message)}
+                      </div>
+                      <div
+                        className={cn(
+                          "absolute z-20 flex w-max gap-0.5 rounded-full border border-border bg-background px-1.5 py-1 shadow-lg transition-opacity duration-150",
+                          isOwn ? "right-0 top-[calc(100%-6px)]" : "left-0 top-[calc(100%-6px)]",
+                          isReactionPickerOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
+                        )}
+                      >
+                        {reactionEmojis.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => reactToMessage(message.id, emoji)}
+                            className="rounded-full px-1.5 py-0.5 text-base leading-none transition-colors hover:bg-panel-hover"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     {message.reactions.length > 0 && (
                       <div className={cn("mt-1 flex flex-wrap gap-1", isOwn ? "justify-end" : "justify-start")}>
@@ -513,23 +574,6 @@ export function Messages() {
                         ))}
                       </div>
                     )}
-                    <div
-                      className={cn(
-                        "pointer-events-none absolute top-full z-20 mt-1 flex w-max gap-1 rounded-full border border-border bg-background/95 px-2 py-1 opacity-0 shadow-lg backdrop-blur transition-opacity group-hover:pointer-events-auto group-hover:opacity-100",
-                        isOwn ? "right-0" : "left-0"
-                      )}
-                    >
-                      {reactionEmojis.map((emoji) => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          onClick={() => reactToMessage(message.id, emoji)}
-                          className="rounded-full px-1.5 py-0.5 text-xs transition-colors hover:bg-panel-hover"
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
                   </div>
                 </div>
               )
