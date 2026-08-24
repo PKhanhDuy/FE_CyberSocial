@@ -128,13 +128,6 @@ export function NotificationDetailModal({ notification, onClose }: NotificationD
                   {notification.isRead ? t("notifications.statusRead") : t("notifications.statusUnread")}
                 </span>
               </div>
-
-              {notification.source && (
-                <p className="mt-3 text-xs font-mono text-muted">
-                  {t("notifications.source")}:{" "}
-                  <span className="text-accent-blue/80">{notification.source}</span>
-                </p>
-              )}
             </div>
           </motion.div>
         </div>
