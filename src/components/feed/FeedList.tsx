@@ -1,15 +1,19 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { MOCK_POSTS } from "@/mocks/data"
 import { PostCard } from "./PostCard"
 import type { Post } from "@/mocks/types"
 import { postApi } from "@/lib/api"
 import { useTranslation } from "react-i18next"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query"
 
 interface FeedListProps {
   searchQuery?: string
   onViewAnalysis: (post: Post) => void
 }
+
+const FEED_PAGE_SIZE = 20
+
+type FeedPage = Awaited<ReturnType<typeof postApi.list>>
 
 const normalizeSearchValue = (value: string) => value.trim().toLowerCase()
 
@@ -34,13 +38,19 @@ export function FeedList({ searchQuery = "", onViewAnalysis }: FeedListProps) {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery.trim())
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const loadMoreRef = useRef<HTMLDivElement>(null)
   const normalizedQuery = debouncedSearchQuery.trim()
   const queryKey = ["posts", normalizedQuery] as const
 
   const prependRepost = useCallback((post: Post) => {
-    queryClient.setQueryData<Awaited<ReturnType<typeof postApi.list>>>(queryKey, (current) => (
-      current ? { ...current, content: [post, ...current.content] } : current
-    ))
+    queryClient.setQueryData<InfiniteData<FeedPage, number>>(queryKey, (current) => {
+      if (!current?.pages.length) return current
+      const [firstPage, ...otherPages] = current.pages
+      return {
+        ...current,
+        pages: [{ ...firstPage, content: [post, ...firstPage.content] }, ...otherPages],
+      }
+    })
   }, [queryClient, queryKey])
 
   useEffect(() => {
@@ -53,9 +63,23 @@ export function FeedList({ searchQuery = "", onViewAnalysis }: FeedListProps) {
     }
   }, [searchQuery])
 
-  const { data, error, isLoading, refetch } = useQuery({
+  const {
+    data,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+    refetch,
+  } = useInfiniteQuery({
     queryKey,
-    queryFn: () => normalizedQuery ? postApi.search(normalizedQuery) : postApi.list(),
+    queryFn: ({ pageParam }) => (
+      normalizedQuery
+        ? postApi.search(normalizedQuery, pageParam, FEED_PAGE_SIZE)
+        : postApi.list(pageParam, FEED_PAGE_SIZE)
+    ),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => (lastPage.last ? undefined : lastPage.page + 1),
   })
 
   useEffect(() => {
@@ -66,7 +90,31 @@ export function FeedList({ searchQuery = "", onViewAnalysis }: FeedListProps) {
     return () => window.removeEventListener("cybersocial:post-created", refreshPosts)
   }, [refetch])
 
-  const posts = filterPosts(data?.content ?? (error ? MOCK_POSTS : []), normalizedQuery)
+  useEffect(() => {
+    const node = loadMoreRef.current
+    if (!node) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          void fetchNextPage()
+        }
+      },
+      { rootMargin: "480px" },
+    )
+
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage])
+
+  const loadedPosts = useMemo(
+    () => data?.pages.flatMap((page) => page.content) ?? [],
+    [data],
+  )
+  const posts = filterPosts(
+    loadedPosts.length > 0 ? loadedPosts : (error ? MOCK_POSTS : []),
+    normalizedQuery,
+  )
   const errorMessage = error instanceof Error ? error.message : error ? t("post.noPostLoad") : null
 
   return (
@@ -86,6 +134,24 @@ export function FeedList({ searchQuery = "", onViewAnalysis }: FeedListProps) {
       {posts.map((post) => (
         <PostCard key={post.id} post={post} onViewAnalysis={onViewAnalysis} onRepostCreated={prependRepost} />
       ))}
+
+      <div ref={loadMoreRef} className="h-1" />
+
+      {isFetchingNextPage && (
+        <div className="text-center py-6 text-muted font-mono text-sm">
+          {t("post.loadingMore")}
+        </div>
+      )}
+
+      {!isLoading && !isFetchingNextPage && hasNextPage && (
+        <button
+          type="button"
+          onClick={() => void fetchNextPage()}
+          className="mx-auto block text-sm font-bold text-accent-blue hover:underline"
+        >
+          {t("post.loadMore")}
+        </button>
+      )}
 
       {!isLoading && posts.length === 0 && (
         <div className="text-center py-8 text-muted font-mono">

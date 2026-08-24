@@ -25,6 +25,8 @@ export const resources = {
       post: {
         noPostLoad: "Không tải được bài viết.",
         downloading: "Đang tải bài viết...",
+        loadingMore: "Đang tải thêm bài viết...",
+        loadMore: "Xem thêm bài viết",
         notFound: "Không có bài viết nào để hiển thị.",
         noPosts: "Chưa có bài viết nào.",
         isSuspicious: "AI PHÁT HIỆN LAN TRUYỀN ĐÁNG NGỜ",
@@ -423,6 +425,8 @@ export const resources = {
       post: {
         noPostLoad: "Failed to load posts.",
         downloading: "Loading posts...",
+        loadingMore: "Loading more posts...",
+        loadMore: "Load more posts",
         notFound: "No posts found.",
         noPosts: "No posts available.",
         isSuspicious: "AI DETECTED SUSPICIOUS CONTENT",
