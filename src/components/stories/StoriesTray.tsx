@@ -1058,79 +1058,81 @@ export function StoriesTray() {
                       )}
                     </>
                   )}
-                  {(selectedStory.caption || selectedStory.music) && (
-                    <div className="absolute inset-x-0 bottom-0 p-5 bg-gradient-to-t from-black/85 to-transparent">
-                      {selectedStory.caption && <p className="text-white text-sm leading-relaxed">{selectedStory.caption}</p>}
-                      {selectedStory.music && (
-                        <div className="mb-3 inline-flex max-w-full items-center gap-2 rounded-full border border-white/20 bg-black/55 px-3 py-2 text-white backdrop-blur">
-                          <Music2 className="w-4 h-4 text-accent-pink shrink-0" />
-                          <span className="text-xs font-bold truncate">{selectedStory.music.title}</span>
-                          <span className="text-xs text-white/60 truncate">- {selectedStory.music.artist}</span>
-                        </div>
-                      )}
-                      {musicPlaybackError && selectedStory.music && (
-                        <div className="mb-3 rounded-lg border border-white/20 bg-black/70 px-3 py-2 text-xs text-white/80 backdrop-blur">
-                          {musicPlaybackError}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {selectedStory.isOwn && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setIsViewerListOpen((current) => !current)}
-                        aria-expanded={isViewerListOpen}
-                        aria-label="Xem danh sach nguoi da xem story"
-                        className="absolute bottom-3 left-4 z-20 text-left text-white drop-shadow-2xl"
-                      >
-                        <ChevronUp className={cn("mb-0.5 h-4 w-4 transition-transform", isViewerListOpen && "rotate-180")} />
-                        <span className="block border-b border-white/80 pb-0.5 text-sm font-extrabold leading-none">
-                          {selectedStoryViewerActivities.length} {t("stories.viewer")}
-                        </span>
-                      </button>
-
-                      <AnimatePresence>
-                        {isViewerListOpen && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 14 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 14 }}
-                            className="absolute inset-x-3 bottom-12 z-30 rounded-lg border border-white/15 bg-black/85 p-3 text-white shadow-2xl backdrop-blur"
-                          >
-                            <div className="mb-2 flex items-center justify-between border-b border-white/10 pb-2">
-                              <div className="text-sm font-bold">{selectedStoryViewerActivities.length} {t("stories.viewer")}</div>
-                              <button
-                                type="button"
-                                onClick={() => setIsViewerListOpen(false)}
-                                aria-label="Dong danh sach nguoi xem"
-                                className="h-7 w-7 rounded-full text-white/60 hover:bg-white/10 hover:text-white transition-colors flex items-center justify-center"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
-                            <div className="max-h-[36vh] space-y-2 overflow-y-auto pr-1">
-                              {selectedStoryViewerActivities.length === 0 && (
-                                <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-sm text-white/55">
-                                  {t("stories.noViewer")}
-                                </div>
-                              )}
-                              {selectedStoryViewerActivities.map((viewer) => (
-                                <div key={viewer.id} className="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-2">
-                                  <Avatar src={viewer.avatar} fallback={viewer.username[0]} className="h-8 w-8" />
-                                  <div className="min-w-0 flex-1">
-                                    <div className="truncate text-sm font-bold">{viewer.username}</div>
-                                    <div className="text-xs text-white/45">{viewer.viewedAt}</div>
+                  {(selectedStory.caption || selectedStory.music || selectedStory.isOwn) && (
+                    <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col">
+                      {selectedStory.isOwn && (
+                        <AnimatePresence>
+                          {isViewerListOpen && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 14 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: 14 }}
+                              className="mx-3 mb-2 rounded-lg border border-white/15 bg-black/85 p-3 text-white shadow-2xl backdrop-blur"
+                            >
+                              <div className="mb-2 flex items-center justify-between border-b border-white/10 pb-2">
+                                <div className="text-sm font-bold">{selectedStoryViewerActivities.length} {t("stories.viewer")}</div>
+                                <button
+                                  type="button"
+                                  onClick={() => setIsViewerListOpen(false)}
+                                  aria-label="Dong danh sach nguoi xem"
+                                  className="h-7 w-7 rounded-full text-white/60 hover:bg-white/10 hover:text-white transition-colors flex items-center justify-center"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                              <div className="max-h-[36vh] space-y-2 overflow-y-auto pr-1">
+                                {selectedStoryViewerActivities.length === 0 && (
+                                  <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-sm text-white/55">
+                                    {t("stories.noViewer")}
                                   </div>
-                                  {viewer.reactionType && <div className="text-xl leading-none">{viewer.reactionType}</div>}
-                                </div>
-                              ))}
-                            </div>
-                          </motion.div>
+                                )}
+                                {selectedStoryViewerActivities.map((viewer) => (
+                                  <div key={viewer.id} className="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-2">
+                                    <Avatar src={viewer.avatar} fallback={viewer.username[0]} className="h-8 w-8" />
+                                    <div className="min-w-0 flex-1">
+                                      <div className="truncate text-sm font-bold">{viewer.username}</div>
+                                      <div className="text-xs text-white/45">{viewer.viewedAt}</div>
+                                    </div>
+                                    {viewer.reactionType && <div className="text-xl leading-none">{viewer.reactionType}</div>}
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      )}
+                      <div className="space-y-2 bg-gradient-to-t from-black/85 to-transparent px-4 pb-3 pt-8">
+                        {selectedStory.music && (
+                          <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/20 bg-black/55 px-3 py-2 text-white backdrop-blur">
+                            <Music2 className="w-4 h-4 text-accent-pink shrink-0" />
+                            <span className="text-xs font-bold truncate">{selectedStory.music.title}</span>
+                            <span className="text-xs text-white/60 truncate">- {selectedStory.music.artist}</span>
+                          </div>
                         )}
-                      </AnimatePresence>
-                    </>
+                        {musicPlaybackError && selectedStory.music && (
+                          <div className="rounded-lg border border-white/20 bg-black/70 px-3 py-2 text-xs text-white/80 backdrop-blur">
+                            {musicPlaybackError}
+                          </div>
+                        )}
+                        {selectedStory.caption && (
+                          <p className="text-white text-sm leading-relaxed">{selectedStory.caption}</p>
+                        )}
+                        {selectedStory.isOwn && (
+                          <button
+                            type="button"
+                            onClick={() => setIsViewerListOpen((current) => !current)}
+                            aria-expanded={isViewerListOpen}
+                            aria-label="Xem danh sach nguoi da xem story"
+                            className="text-left text-white drop-shadow-2xl"
+                          >
+                            <ChevronUp className={cn("mb-0.5 h-4 w-4 transition-transform", isViewerListOpen && "rotate-180")} />
+                            <span className="block w-fit border-b border-white/80 pb-0.5 text-sm font-extrabold leading-none">
+                              {selectedStoryViewerActivities.length} {t("stories.viewer")}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </motion.div>
 

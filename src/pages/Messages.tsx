@@ -502,7 +502,7 @@ export function Messages() {
             </div>
           )}
 
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-4">
+          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-4">
             {isOpeningConversation && (
               <div className="flex justify-center py-8 text-muted">
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -528,7 +528,7 @@ export function Messages() {
               return (
                 <div key={message.id} className={cn("flex", isOwn ? "justify-end" : "justify-start")}>
                   <div
-                    className={cn("relative flex max-w-[78%] flex-col pb-8", isOwn && "items-end")}
+                    className={cn("relative flex max-w-[78%] flex-col", isOwn && "items-end")}
                     onMouseEnter={() => showReactionPicker(message.id)}
                     onMouseLeave={hideReactionPicker}
                   >

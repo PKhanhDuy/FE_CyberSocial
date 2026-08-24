@@ -180,13 +180,6 @@ export function Notifications() {
                 <p className="text-muted text-sm leading-relaxed mb-2 line-clamp-2">
                   {notification.message}
                 </p>
-
-                {notification.source && (
-                  <div className="text-xs font-mono text-muted flex items-center gap-1">
-                    <span className="opacity-50">{t("notifications.source")}:</span>
-                    <span className="text-accent-blue/70">{notification.source}</span>
-                  </div>
-                )}
               </div>
             </div>
           </button>
